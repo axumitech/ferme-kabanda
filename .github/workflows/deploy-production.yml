@@ -40,46 +40,70 @@ jobs:
         uses: actions/checkout@v4
 
       # ==========================================================
-      # 2. PHP 8.4.24 + Composer
+      # 2. PHP 8.4 + Composer
       # ==========================================================
       - name: Setup PHP
+        id: setup-php
         uses: shivammathur/setup-php@v2
         with:
-          php-version: "8.4.24"
+          php-version: "8.4"
           extensions: mbstring, pdo_sqlite, sqlite3, bcmath, intl, curl, xml, ctype, fileinfo
           tools: composer:v2
           coverage: none
+        env:
+          update: true
+          fail-fast: true
 
       # ==========================================================
-      # 3. Vérifier la version PHP
+      # 3. Vérification stricte de PHP
       # ==========================================================
       - name: Verify PHP version
         run: |
           set -euo pipefail
 
+          echo "PHP executable:"
+          command -v php
+
+          echo ""
+          echo "PHP version:"
           php -v
+
+          echo ""
+          echo "Composer executable:"
+          command -v composer
+
+          echo ""
+          echo "Composer version:"
           composer --version
 
-          php -r '
-            if (version_compare(PHP_VERSION, "8.4.1", "<")) {
-                fwrite(STDERR, "ERROR: PHP 8.4.1+ required. Current: ".PHP_VERSION.PHP_EOL);
-                exit(1);
-            }
+          PHP_VERSION_ACTUAL="$(php -r 'echo PHP_VERSION;')"
 
-            echo "PHP version compatible: ".PHP_VERSION.PHP_EOL;
-          '
+          if ! php -r 'exit(version_compare(PHP_VERSION, "8.4.1", ">=") ? 0 : 1);'; then
+            echo "ERROR: PHP >= 8.4.1 required"
+            echo "Current PHP: $PHP_VERSION_ACTUAL"
+            exit 1
+          fi
+
+          echo "PHP version compatible: $PHP_VERSION_ACTUAL"
 
       # ==========================================================
-      # 4. Environnement Laravel temporaire CI
+      # 4. Environnement Laravel CI temporaire
       # ==========================================================
       - name: Prepare Laravel CI environment
         run: |
           set -euo pipefail
 
+          if [ ! -f ".env.example" ]; then
+            echo "ERROR: .env.example is missing"
+            exit 1
+          fi
+
           cp .env.example .env
 
           mkdir -p database
           touch database/database.sqlite
+
+          echo "Laravel CI environment ready"
 
       # ==========================================================
       # 5. Dépendances PHP
@@ -88,6 +112,9 @@ jobs:
         run: |
           set -euo pipefail
 
+          php -v
+          composer --version
+
           composer install \
             --prefer-dist \
             --no-interaction \
@@ -95,10 +122,13 @@ jobs:
             --optimize-autoloader
 
       # ==========================================================
-      # 6. APP KEY temporaire
+      # 6. APP_KEY temporaire
       # ==========================================================
       - name: Generate CI application key
-        run: php artisan key:generate --force
+        run: |
+          set -euo pipefail
+
+          php artisan key:generate --force
 
       # ==========================================================
       # 7. Vérifier Laravel
@@ -111,8 +141,10 @@ jobs:
           php artisan optimize:clear
           php artisan route:clear
 
+          echo "Laravel bootstrap OK"
+
       # ==========================================================
-      # 8. Wayfinder
+      # 8. Générer Wayfinder
       # ==========================================================
       - name: Generate Wayfinder types
         run: |
@@ -120,8 +152,10 @@ jobs:
 
           php artisan wayfinder:generate --with-form
 
+          echo "Wayfinder generation OK"
+
       # ==========================================================
-      # 9. Node
+      # 9. Node.js
       # ==========================================================
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -136,13 +170,13 @@ jobs:
         run: npm ci
 
       # ==========================================================
-      # 11. Build Vite / React
+      # 11. Build frontend
       # ==========================================================
       - name: Build frontend
         run: npm run build
 
       # ==========================================================
-      # 12. Vérifier le build
+      # 12. Vérifier le build Vite
       # ==========================================================
       - name: Verify frontend build
         run: |
@@ -163,8 +197,7 @@ jobs:
       # ==========================================================
       # 13. Packager les fichiers publics
       #
-      # index.php est exclu car Hostking utilise
-      # un index.php spécifique.
+      # index.php est volontairement exclu.
       # ==========================================================
       - name: Package public assets
         run: |
@@ -181,7 +214,6 @@ jobs:
       # 14. Configurer SSH
       #
       # Secrets requis :
-      #
       # HOSTKING_HOST
       # HOSTKING_PORT
       # HOSTKING_USER
@@ -202,6 +234,8 @@ jobs:
 
           printf '%s\n' "$SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
           chmod 600 "$HOME/.ssh/id_ed25519"
+
+          echo "Scanning Hostking SSH host key..."
 
           ssh-keyscan \
             -t ed25519 \
@@ -235,6 +269,8 @@ jobs:
 
           chmod 600 "$HOME/.ssh/known_hosts"
 
+          echo "SSH configuration ready"
+
       # ==========================================================
       # 15. Tester SSH
       # ==========================================================
@@ -258,7 +294,7 @@ jobs:
             'echo "SSH connection successful"; whoami; pwd'
 
       # ==========================================================
-      # 16. Upload des assets
+      # 16. Upload assets
       # ==========================================================
       - name: Upload public assets
         env:
@@ -302,13 +338,11 @@ jobs:
           set -Eeuo pipefail
 
           APP_DIR="/home/zwswegws/ferme-kabanda"
-
           PUBLIC_DIR="/home/zwswegws/domains/fermekabandanaweza.com/public_html"
 
           ARCHIVE="/home/zwswegws/ferme-kabanda-public-${DEPLOY_SHA}.tar.gz"
 
           STAGING_ROOT="/home/zwswegws/.deploy"
-
           STAGING_DIR="${STAGING_ROOT}/ferme-kabanda-${DEPLOY_SHA}"
 
           echo ""
@@ -323,7 +357,7 @@ jobs:
           cd "$APP_DIR"
 
           # ======================================================
-          # Cleanup automatique
+          # Nettoyage automatique
           # ======================================================
           cleanup() {
               EXIT_CODE=$?
@@ -348,7 +382,7 @@ jobs:
           trap cleanup EXIT
 
           # ======================================================
-          # Vérifications
+          # Vérifier l'environnement production
           # ======================================================
           echo "Checking production environment..."
 
@@ -393,7 +427,7 @@ jobs:
           git fetch --prune origin main
 
           echo ""
-          echo "Deploying commit:"
+          echo "Deploying exact commit:"
           echo "$DEPLOY_SHA"
 
           git reset --hard "$DEPLOY_SHA"
@@ -410,9 +444,20 @@ jobs:
           # Composer production
           # ======================================================
           echo ""
-          echo "Installing production Composer dependencies..."
+          echo "Checking production PHP version..."
 
           php -v
+
+          PHP_PROD_VERSION="$(php -r 'echo PHP_VERSION;')"
+
+          if ! php -r 'exit(version_compare(PHP_VERSION, "8.4.1", ">=") ? 0 : 1);'; then
+              echo "ERROR: Production PHP >= 8.4.1 required"
+              echo "Current PHP: $PHP_PROD_VERSION"
+              exit 1
+          fi
+
+          echo ""
+          echo "Installing production Composer dependencies..."
 
           composer install \
               --no-dev \
@@ -438,7 +483,7 @@ jobs:
           php artisan migrate --force
 
           # ======================================================
-          # Extraction du build GitHub
+          # Extraction du build
           # ======================================================
           echo ""
           echo "Preparing public assets..."
@@ -455,7 +500,7 @@ jobs:
           fi
 
           # ======================================================
-          # Déploiement atomique du build Vite
+          # Déploiement atomique de Vite
           # ======================================================
           echo ""
           echo "Deploying Vite build..."
@@ -478,8 +523,6 @@ jobs:
 
           # ======================================================
           # Synchroniser les autres fichiers publics
-          #
-          # index.php est absent de l'archive.
           # ======================================================
           echo ""
           echo "Synchronizing public files..."
