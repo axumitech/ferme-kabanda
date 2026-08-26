@@ -40,18 +40,37 @@ jobs:
         uses: actions/checkout@v4
 
       # ==========================================================
-      # 2. PHP + Composer
+      # 2. PHP 8.4.24 + Composer
       # ==========================================================
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: "8.4"
+          php-version: "8.4.24"
           extensions: mbstring, pdo_sqlite, sqlite3, bcmath, intl, curl, xml, ctype, fileinfo
           tools: composer:v2
           coverage: none
 
       # ==========================================================
-      # 3. Laravel CI environment
+      # 3. Vérifier la version PHP
+      # ==========================================================
+      - name: Verify PHP version
+        run: |
+          set -euo pipefail
+
+          php -v
+          composer --version
+
+          php -r '
+            if (version_compare(PHP_VERSION, "8.4.1", "<")) {
+                fwrite(STDERR, "ERROR: PHP 8.4.1+ required. Current: ".PHP_VERSION.PHP_EOL);
+                exit(1);
+            }
+
+            echo "PHP version compatible: ".PHP_VERSION.PHP_EOL;
+          '
+
+      # ==========================================================
+      # 4. Environnement Laravel temporaire CI
       # ==========================================================
       - name: Prepare Laravel CI environment
         run: |
@@ -63,10 +82,12 @@ jobs:
           touch database/database.sqlite
 
       # ==========================================================
-      # 4. PHP dependencies
+      # 5. Dépendances PHP
       # ==========================================================
       - name: Install PHP dependencies
         run: |
+          set -euo pipefail
+
           composer install \
             --prefer-dist \
             --no-interaction \
@@ -74,34 +95,33 @@ jobs:
             --optimize-autoloader
 
       # ==========================================================
-      # 5. APP KEY
+      # 6. APP KEY temporaire
       # ==========================================================
       - name: Generate CI application key
         run: php artisan key:generate --force
 
       # ==========================================================
-      # 6. Laravel verification
+      # 7. Vérifier Laravel
       # ==========================================================
       - name: Verify Laravel
         run: |
           set -euo pipefail
 
-          php -v
-          composer --version
           php artisan --version
-
           php artisan optimize:clear
           php artisan route:clear
 
       # ==========================================================
-      # 7. Wayfinder
+      # 8. Wayfinder
       # ==========================================================
       - name: Generate Wayfinder types
         run: |
+          set -euo pipefail
+
           php artisan wayfinder:generate --with-form
 
       # ==========================================================
-      # 8. Node
+      # 9. Node
       # ==========================================================
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -110,35 +130,41 @@ jobs:
           cache: npm
 
       # ==========================================================
-      # 9. NPM dependencies
+      # 10. Dépendances frontend
       # ==========================================================
       - name: Install frontend dependencies
         run: npm ci
 
       # ==========================================================
-      # 10. Vite build
+      # 11. Build Vite / React
       # ==========================================================
       - name: Build frontend
         run: npm run build
 
       # ==========================================================
-      # 11. Verify build
+      # 12. Vérifier le build
       # ==========================================================
       - name: Verify frontend build
         run: |
           set -euo pipefail
 
-          test -d public/build
-          test -f public/build/manifest.json
+          if [ ! -d "public/build" ]; then
+            echo "ERROR: public/build does not exist"
+            exit 1
+          fi
+
+          if [ ! -f "public/build/manifest.json" ]; then
+            echo "ERROR: public/build/manifest.json does not exist"
+            exit 1
+          fi
 
           echo "Frontend build OK"
 
       # ==========================================================
-      # 12. Package public files
+      # 13. Packager les fichiers publics
       #
-      # index.php is excluded because Hostking uses
-      # a custom index.php pointing to:
-      # /home/zwswegws/ferme-kabanda
+      # index.php est exclu car Hostking utilise
+      # un index.php spécifique.
       # ==========================================================
       - name: Package public assets
         run: |
@@ -152,9 +178,9 @@ jobs:
           ls -lh /tmp/ferme-kabanda-public.tar.gz
 
       # ==========================================================
-      # 13. Configure SSH
+      # 14. Configurer SSH
       #
-      # Required secrets:
+      # Secrets requis :
       #
       # HOSTKING_HOST
       # HOSTKING_PORT
@@ -209,10 +235,8 @@ jobs:
 
           chmod 600 "$HOME/.ssh/known_hosts"
 
-          echo "SSH configuration ready"
-
       # ==========================================================
-      # 14. Test SSH
+      # 15. Tester SSH
       # ==========================================================
       - name: Test SSH connection
         env:
@@ -234,7 +258,7 @@ jobs:
             'echo "SSH connection successful"; whoami; pwd'
 
       # ==========================================================
-      # 15. Upload build
+      # 16. Upload des assets
       # ==========================================================
       - name: Upload public assets
         env:
@@ -256,7 +280,7 @@ jobs:
             "$USER@$HOST:/home/zwswegws/ferme-kabanda-public-${GITHUB_SHA}.tar.gz"
 
       # ==========================================================
-      # 16. Deploy Laravel
+      # 17. Déployer Laravel sur Hostking
       # ==========================================================
       - name: Deploy Laravel
         env:
@@ -299,9 +323,8 @@ jobs:
           cd "$APP_DIR"
 
           # ======================================================
-          # Automatic cleanup
+          # Cleanup automatique
           # ======================================================
-
           cleanup() {
               EXIT_CODE=$?
 
@@ -325,9 +348,8 @@ jobs:
           trap cleanup EXIT
 
           # ======================================================
-          # Validate server
+          # Vérifications
           # ======================================================
-
           echo "Checking production environment..."
 
           if [ ! -d "$APP_DIR" ]; then
@@ -365,7 +387,6 @@ jobs:
           # ======================================================
           # Git
           # ======================================================
-
           echo ""
           echo "Fetching GitHub repository..."
 
@@ -380,18 +401,18 @@ jobs:
           # ======================================================
           # Maintenance
           # ======================================================
-
           echo ""
           echo "Enabling Laravel maintenance mode..."
 
           php artisan down --retry=60 || true
 
           # ======================================================
-          # Composer
+          # Composer production
           # ======================================================
-
           echo ""
-          echo "Installing production dependencies..."
+          echo "Installing production Composer dependencies..."
+
+          php -v
 
           composer install \
               --no-dev \
@@ -401,27 +422,24 @@ jobs:
               --optimize-autoloader
 
           # ======================================================
-          # Laravel cache
+          # Cache Laravel
           # ======================================================
-
           echo ""
           echo "Clearing Laravel caches..."
 
           php artisan optimize:clear
 
           # ======================================================
-          # Database
+          # Migrations
           # ======================================================
-
           echo ""
-          echo "Running migrations..."
+          echo "Running database migrations..."
 
           php artisan migrate --force
 
           # ======================================================
-          # Extract GitHub frontend build
+          # Extraction du build GitHub
           # ======================================================
-
           echo ""
           echo "Preparing public assets..."
 
@@ -437,9 +455,8 @@ jobs:
           fi
 
           # ======================================================
-          # Atomic Vite deployment
+          # Déploiement atomique du build Vite
           # ======================================================
-
           echo ""
           echo "Deploying Vite build..."
 
@@ -460,11 +477,10 @@ jobs:
           rm -rf "$OLD_BUILD"
 
           # ======================================================
-          # Sync other public files
+          # Synchroniser les autres fichiers publics
           #
-          # index.php is not included in the archive.
+          # index.php est absent de l'archive.
           # ======================================================
-
           echo ""
           echo "Synchronizing public files..."
 
@@ -473,16 +489,14 @@ jobs:
           # ======================================================
           # Permissions
           # ======================================================
-
           echo ""
           echo "Updating permissions..."
 
           chmod -R 775 storage bootstrap/cache || true
 
           # ======================================================
-          # Production caches
+          # Cache production
           # ======================================================
-
           echo ""
           echo "Building production caches..."
 
@@ -490,18 +504,16 @@ jobs:
           php artisan view:cache
 
           # ======================================================
-          # Application up
+          # Remise en ligne
           # ======================================================
-
           echo ""
           echo "Disabling maintenance mode..."
 
           php artisan up
 
           # ======================================================
-          # Cleanup
+          # Nettoyage
           # ======================================================
-
           echo ""
           echo "Cleaning deployment files..."
 
