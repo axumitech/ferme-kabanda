@@ -75,6 +75,8 @@ export default function MembersAdmin({
         );
     }, [members, query]);
 
+    // ADD TEST TO SEA IF IT'S WORK
+
     const reset = () => {
         setEditing(null);
         form.setData({ ...emptyMember, reference_item_id: '' });
