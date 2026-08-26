@@ -8,8 +8,10 @@ use App\Models\InventoryMovement;
 use App\Models\ProductStock;
 use App\Models\ProductStockMovement;
 use App\Models\User;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 class InventoryTest extends TestCase
@@ -157,6 +159,17 @@ class InventoryTest extends TestCase
 
         $migration = require database_path('migrations/2026_08_26_010000_create_normalized_inventory_tables.php');
         $migration->down();
+
+        // Simule une précédente tentative MySQL interrompue après le premier CREATE TABLE.
+        Schema::create('inventory_categories', function (Blueprint $table): void {
+            $table->id();
+            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->string('code', 20);
+            $table->string('name', 120);
+            $table->timestamps();
+            $table->unique(['user_id', 'code']);
+        });
+
         $migration->up();
 
         $this->assertDatabaseHas('inventory_items', [

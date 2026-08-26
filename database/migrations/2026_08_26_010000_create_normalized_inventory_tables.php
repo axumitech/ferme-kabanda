@@ -9,103 +9,117 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('inventory_categories', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            $table->string('code', 20);
-            $table->string('name', 120);
-            $table->timestamps();
-            $table->unique(['user_id', 'code']);
-        });
+        if (! Schema::hasTable('inventory_categories')) {
+            Schema::create('inventory_categories', function (Blueprint $table) {
+                $table->id();
+                $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+                $table->string('code', 20);
+                $table->string('name', 120);
+                $table->timestamps();
+                $table->unique(['user_id', 'code']);
+            });
+        }
 
-        Schema::create('inventory_items', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('inventory_category_id')->constrained()->restrictOnDelete();
-            $table->string('code', 60);
-            $table->string('name', 180);
-            $table->string('unit', 40);
-            $table->decimal('quantity_on_hand', 14, 3)->default(0);
-            $table->decimal('unit_price', 14, 2)->default(0);
-            $table->decimal('minimum_quantity', 14, 3)->nullable();
-            $table->string('cost_center', 30)->nullable();
-            $table->date('created_on')->nullable();
-            $table->timestamps();
-            $table->unique(['user_id', 'code']);
-            $table->index(['user_id', 'name']);
-        });
+        if (! Schema::hasTable('inventory_items')) {
+            Schema::create('inventory_items', function (Blueprint $table) {
+                $table->id();
+                $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+                $table->foreignId('inventory_category_id')->constrained()->restrictOnDelete();
+                $table->string('code', 60);
+                $table->string('name', 180);
+                $table->string('unit', 40);
+                $table->decimal('quantity_on_hand', 14, 3)->default(0);
+                $table->decimal('unit_price', 14, 2)->default(0);
+                $table->decimal('minimum_quantity', 14, 3)->nullable();
+                $table->string('cost_center', 30)->nullable();
+                $table->date('created_on')->nullable();
+                $table->timestamps();
+                $table->unique(['user_id', 'code']);
+                $table->index(['user_id', 'name']);
+            });
+        }
 
-        Schema::create('inventory_movements', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('inventory_item_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('actor_user_id')->nullable()->constrained('users')->nullOnDelete();
-            $table->string('movement_type', 30);
-            $table->decimal('quantity_change', 14, 3);
-            $table->decimal('quantity_before', 14, 3);
-            $table->decimal('quantity_after', 14, 3);
-            $table->string('reference', 120)->nullable();
-            $table->text('notes')->nullable();
-            $table->json('metadata')->nullable();
-            $table->timestamp('occurred_at');
-            $table->timestamps();
-            $table->index(['user_id', 'occurred_at']);
-            $table->index(['inventory_item_id', 'occurred_at']);
-        });
+        if (! Schema::hasTable('inventory_movements')) {
+            Schema::create('inventory_movements', function (Blueprint $table) {
+                $table->id();
+                $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+                $table->foreignId('inventory_item_id')->constrained()->cascadeOnDelete();
+                $table->foreignId('actor_user_id')->nullable()->constrained('users')->nullOnDelete();
+                $table->string('movement_type', 30);
+                $table->decimal('quantity_change', 14, 3);
+                $table->decimal('quantity_before', 14, 3);
+                $table->decimal('quantity_after', 14, 3);
+                $table->string('reference', 120)->nullable();
+                $table->text('notes')->nullable();
+                $table->json('metadata')->nullable();
+                $table->timestamp('occurred_at');
+                $table->timestamps();
+                $table->index(['user_id', 'occurred_at']);
+                $table->index(['inventory_item_id', 'occurred_at']);
+            });
+        }
 
-        Schema::create('product_stocks', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            $table->string('product_name', 180);
-            $table->string('unit', 40)->nullable();
-            $table->decimal('quantity_on_hand', 14, 3)->default(0);
-            $table->decimal('minimum_quantity', 14, 3)->nullable();
-            $table->timestamps();
-            $table->unique(['user_id', 'product_name']);
-        });
+        if (! Schema::hasTable('product_stocks')) {
+            Schema::create('product_stocks', function (Blueprint $table) {
+                $table->id();
+                $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+                $table->string('product_name', 180);
+                $table->string('unit', 40)->nullable();
+                $table->decimal('quantity_on_hand', 14, 3)->default(0);
+                $table->decimal('minimum_quantity', 14, 3)->nullable();
+                $table->timestamps();
+                $table->unique(['user_id', 'product_name']);
+            });
+        }
 
-        Schema::create('product_stock_movements', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('product_stock_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('actor_user_id')->nullable()->constrained('users')->nullOnDelete();
-            $table->string('movement_type', 30);
-            $table->decimal('quantity_change', 14, 3);
-            $table->decimal('quantity_before', 14, 3);
-            $table->decimal('quantity_after', 14, 3);
-            $table->string('reference', 120)->nullable();
-            $table->text('notes')->nullable();
-            $table->json('metadata')->nullable();
-            $table->timestamp('occurred_at');
-            $table->timestamps();
-            $table->index(['user_id', 'occurred_at']);
-            $table->index(['product_stock_id', 'occurred_at']);
-        });
+        if (! Schema::hasTable('product_stock_movements')) {
+            Schema::create('product_stock_movements', function (Blueprint $table) {
+                $table->id();
+                $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+                $table->foreignId('product_stock_id')->constrained()->cascadeOnDelete();
+                $table->foreignId('actor_user_id')->nullable()->constrained('users')->nullOnDelete();
+                $table->string('movement_type', 30);
+                $table->decimal('quantity_change', 14, 3);
+                $table->decimal('quantity_before', 14, 3);
+                $table->decimal('quantity_after', 14, 3);
+                $table->string('reference', 120)->nullable();
+                $table->text('notes')->nullable();
+                $table->json('metadata')->nullable();
+                $table->timestamp('occurred_at');
+                $table->timestamps();
+                $table->index(['user_id', 'occurred_at']);
+                $table->index(['product_stock_id', 'occurred_at']);
+            });
+        }
 
-        Schema::create('inventory_counts', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
-            $table->string('reference', 60);
-            $table->string('status', 20)->default('draft');
-            $table->date('counted_on');
-            $table->text('notes')->nullable();
-            $table->timestamp('finalized_at')->nullable();
-            $table->timestamps();
-            $table->unique(['user_id', 'reference']);
-            $table->index(['user_id', 'counted_on']);
-        });
+        if (! Schema::hasTable('inventory_counts')) {
+            Schema::create('inventory_counts', function (Blueprint $table) {
+                $table->id();
+                $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+                $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
+                $table->string('reference', 60);
+                $table->string('status', 20)->default('draft');
+                $table->date('counted_on');
+                $table->text('notes')->nullable();
+                $table->timestamp('finalized_at')->nullable();
+                $table->timestamps();
+                $table->unique(['user_id', 'reference']);
+                $table->index(['user_id', 'counted_on']);
+            });
+        }
 
-        Schema::create('inventory_count_lines', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('inventory_count_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('inventory_item_id')->constrained()->restrictOnDelete();
-            $table->decimal('expected_quantity', 14, 3);
-            $table->decimal('counted_quantity', 14, 3)->nullable();
-            $table->text('notes')->nullable();
-            $table->timestamps();
-            $table->unique(['inventory_count_id', 'inventory_item_id']);
-        });
+        if (! Schema::hasTable('inventory_count_lines')) {
+            Schema::create('inventory_count_lines', function (Blueprint $table) {
+                $table->id();
+                $table->foreignId('inventory_count_id')->constrained()->cascadeOnDelete();
+                $table->foreignId('inventory_item_id')->constrained()->restrictOnDelete();
+                $table->decimal('expected_quantity', 14, 3);
+                $table->decimal('counted_quantity', 14, 3)->nullable();
+                $table->text('notes')->nullable();
+                $table->timestamps();
+                $table->unique(['inventory_count_id', 'inventory_item_id']);
+            });
+        }
 
         $this->migrateLegacyData();
     }
@@ -159,35 +173,53 @@ return new class extends Migration
                 ->value('id');
 
             $quantity = max(0, round((float) ($article['qte'] ?? 0), 3));
-            $itemId = DB::table('inventory_items')->insertGetId([
-                'user_id' => $record['user_id'],
-                'inventory_category_id' => $categoryId,
-                'code' => mb_substr((string) $article['code'], 0, 60),
-                'name' => mb_substr((string) $article['lib'], 0, 180),
-                'unit' => mb_substr((string) ($article['unite'] ?? 'unité'), 0, 40),
-                'quantity_on_hand' => $quantity,
-                'unit_price' => max(0, round((float) ($article['pu'] ?? 0), 2)),
-                'minimum_quantity' => filled($article['mini'] ?? null) ? max(0, round((float) $article['mini'], 3)) : null,
-                'cost_center' => filled($article['cc'] ?? null) ? mb_substr((string) $article['cc'], 0, 30) : null,
-                'created_on' => preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) ($article['cree'] ?? '')) ? $article['cree'] : null,
-                'created_at' => $record['created_at'],
-                'updated_at' => $record['updated_at'],
-            ]);
-
-            if ($quantity > 0) {
-                DB::table('inventory_movements')->insert([
+            $itemCode = mb_substr((string) $article['code'], 0, 60);
+            DB::table('inventory_items')->updateOrInsert(
+                ['user_id' => $record['user_id'], 'code' => $itemCode],
+                [
                     'user_id' => $record['user_id'],
-                    'inventory_item_id' => $itemId,
-                    'actor_user_id' => $record['user_id'],
-                    'movement_type' => 'opening_balance',
-                    'quantity_change' => $quantity,
-                    'quantity_before' => 0,
-                    'quantity_after' => $quantity,
-                    'metadata' => json_encode(['source' => 'farm_records', 'legacy_record_id' => $record['id']]),
-                    'occurred_at' => $record['updated_at'],
+                    'inventory_category_id' => $categoryId,
+                    'code' => $itemCode,
+                    'name' => mb_substr((string) $article['lib'], 0, 180),
+                    'unit' => mb_substr((string) ($article['unite'] ?? 'unité'), 0, 40),
+                    'quantity_on_hand' => $quantity,
+                    'unit_price' => max(0, round((float) ($article['pu'] ?? 0), 2)),
+                    'minimum_quantity' => filled($article['mini'] ?? null) ? max(0, round((float) $article['mini'], 3)) : null,
+                    'cost_center' => filled($article['cc'] ?? null) ? mb_substr((string) $article['cc'], 0, 30) : null,
+                    'created_on' => preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) ($article['cree'] ?? '')) ? $article['cree'] : null,
                     'created_at' => $record['created_at'],
                     'updated_at' => $record['updated_at'],
-                ]);
+                ],
+            );
+
+            $itemId = DB::table('inventory_items')
+                ->where('user_id', $record['user_id'])
+                ->where('code', $itemCode)
+                ->value('id');
+
+            if ($quantity > 0) {
+                $reference = 'legacy:farm_records:'.$record['id'];
+                DB::table('inventory_movements')->updateOrInsert(
+                    [
+                        'inventory_item_id' => $itemId,
+                        'movement_type' => 'opening_balance',
+                        'reference' => $reference,
+                    ],
+                    [
+                        'user_id' => $record['user_id'],
+                        'inventory_item_id' => $itemId,
+                        'actor_user_id' => $record['user_id'],
+                        'movement_type' => 'opening_balance',
+                        'quantity_change' => $quantity,
+                        'quantity_before' => 0,
+                        'quantity_after' => $quantity,
+                        'reference' => $reference,
+                        'metadata' => json_encode(['source' => 'farm_records', 'legacy_record_id' => $record['id']]),
+                        'occurred_at' => $record['updated_at'],
+                        'created_at' => $record['created_at'],
+                        'updated_at' => $record['updated_at'],
+                    ],
+                );
             }
         }
     }
@@ -204,28 +236,46 @@ return new class extends Migration
             }
 
             $quantity = max(0, round((float) $rawQuantity, 3));
-            $stockId = DB::table('product_stocks')->insertGetId([
-                'user_id' => $record['user_id'],
-                'product_name' => mb_substr($productName, 0, 180),
-                'quantity_on_hand' => $quantity,
-                'created_at' => $record['created_at'],
-                'updated_at' => $record['updated_at'],
-            ]);
-
-            if ($quantity > 0) {
-                DB::table('product_stock_movements')->insert([
+            $productName = mb_substr($productName, 0, 180);
+            DB::table('product_stocks')->updateOrInsert(
+                ['user_id' => $record['user_id'], 'product_name' => $productName],
+                [
                     'user_id' => $record['user_id'],
-                    'product_stock_id' => $stockId,
-                    'actor_user_id' => $record['user_id'],
-                    'movement_type' => 'opening_balance',
-                    'quantity_change' => $quantity,
-                    'quantity_before' => 0,
-                    'quantity_after' => $quantity,
-                    'metadata' => json_encode(['source' => 'farm_records', 'legacy_record_id' => $record['id']]),
-                    'occurred_at' => $record['updated_at'],
+                    'product_name' => $productName,
+                    'quantity_on_hand' => $quantity,
                     'created_at' => $record['created_at'],
                     'updated_at' => $record['updated_at'],
-                ]);
+                ],
+            );
+
+            $stockId = DB::table('product_stocks')
+                ->where('user_id', $record['user_id'])
+                ->where('product_name', $productName)
+                ->value('id');
+
+            if ($quantity > 0) {
+                $reference = 'legacy:farm_records:'.$record['id'];
+                DB::table('product_stock_movements')->updateOrInsert(
+                    [
+                        'product_stock_id' => $stockId,
+                        'movement_type' => 'opening_balance',
+                        'reference' => $reference,
+                    ],
+                    [
+                        'user_id' => $record['user_id'],
+                        'product_stock_id' => $stockId,
+                        'actor_user_id' => $record['user_id'],
+                        'movement_type' => 'opening_balance',
+                        'quantity_change' => $quantity,
+                        'quantity_before' => 0,
+                        'quantity_after' => $quantity,
+                        'reference' => $reference,
+                        'metadata' => json_encode(['source' => 'farm_records', 'legacy_record_id' => $record['id']]),
+                        'occurred_at' => $record['updated_at'],
+                        'created_at' => $record['created_at'],
+                        'updated_at' => $record['updated_at'],
+                    ],
+                );
             }
         }
     }
