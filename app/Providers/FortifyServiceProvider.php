@@ -4,8 +4,10 @@ namespace App\Providers;
 
 use App\Actions\Fortify\CreateNewUser;
 use App\Actions\Fortify\ResetUserPassword;
+use App\Models\User;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
@@ -41,6 +43,23 @@ class FortifyServiceProvider extends ServiceProvider
     {
         Fortify::resetUserPasswordsUsing(ResetUserPassword::class);
         Fortify::createUsersUsing(CreateNewUser::class);
+        Fortify::authenticateUsing(function (Request $request): ?User {
+            $identifier = trim((string) $request->input(Fortify::username()));
+            $phone = User::normalizePhone($identifier);
+
+            $user = User::query()
+                ->where('email', Str::lower($identifier))
+                ->when($phone, fn ($query) => $query->orWhere('phone', $phone))
+                ->first();
+
+            return $user && Hash::check((string) $request->password, $user->password)
+                ? $user
+                : null;
+        });
+
+        Fortify::confirmPasswordsUsing(
+            fn (User $user, ?string $password): bool => Hash::check((string) $password, $user->password),
+        );
     }
 
     /**
