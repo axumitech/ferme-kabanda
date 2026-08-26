@@ -19,10 +19,6 @@ jobs:
     name: Build and Deploy
     runs-on: ubuntu-latest
 
-    # ============================================================
-    # Environnement uniquement utilisé sur le runner GitHub.
-    # Ce ne sont PAS les variables du serveur Hostking.
-    # ============================================================
     env:
       APP_ENV: testing
       APP_DEBUG: "false"
@@ -38,16 +34,13 @@ jobs:
 
     steps:
       # ==========================================================
-      # 1. Récupération du repository
+      # 1. Checkout
       # ==========================================================
       - name: Checkout repository
         uses: actions/checkout@v4
 
       # ==========================================================
       # 2. PHP + Composer
-      #
-      # Wayfinder exécute php artisan pendant le build Vite.
-      # Laravel doit donc être fonctionnel AVANT npm run build.
       # ==========================================================
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -58,30 +51,19 @@ jobs:
           coverage: none
 
       # ==========================================================
-      # 3. Préparer l'environnement Laravel du runner CI
-      #
-      # Ce .env est temporaire et disparaît avec le runner.
-      # Il ne touche PAS au .env Hostking.
+      # 3. Laravel CI environment
       # ==========================================================
       - name: Prepare Laravel CI environment
         run: |
-          if [ ! -f ".env.example" ]; then
-            echo "ERROR: .env.example does not exist"
-            exit 1
-          fi
+          set -euo pipefail
 
           cp .env.example .env
 
           mkdir -p database
           touch database/database.sqlite
 
-          echo "Laravel CI environment prepared"
-
       # ==========================================================
-      # 4. Installer les dépendances PHP
-      #
-      # Pas de --no-dev ici :
-      # le runner GitHub est un environnement de build.
+      # 4. PHP dependencies
       # ==========================================================
       - name: Install PHP dependencies
         run: |
@@ -92,16 +74,18 @@ jobs:
             --optimize-autoloader
 
       # ==========================================================
-      # 5. Générer une APP_KEY temporaire
+      # 5. APP KEY
       # ==========================================================
       - name: Generate CI application key
         run: php artisan key:generate --force
 
       # ==========================================================
-      # 6. Vérifier Laravel
+      # 6. Laravel verification
       # ==========================================================
       - name: Verify Laravel
         run: |
+          set -euo pipefail
+
           php -v
           composer --version
           php artisan --version
@@ -109,25 +93,15 @@ jobs:
           php artisan optimize:clear
           php artisan route:clear
 
-          echo "Laravel bootstrap OK"
-
       # ==========================================================
-      # 7. Vérifier Wayfinder explicitement
-      #
-      # Si Wayfinder échoue, on aura une erreur claire ici
-      # avant d'arriver au build Vite.
+      # 7. Wayfinder
       # ==========================================================
       - name: Generate Wayfinder types
         run: |
           php artisan wayfinder:generate --with-form
 
-          echo "Wayfinder generation OK"
-
       # ==========================================================
-      # 8. Node.js
-      #
-      # Node n'est pas installé sur Hostking.
-      # Le frontend est donc compilé ici.
+      # 8. Node
       # ==========================================================
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -136,80 +110,109 @@ jobs:
           cache: npm
 
       # ==========================================================
-      # 9. Installer les dépendances frontend
+      # 9. NPM dependencies
       # ==========================================================
       - name: Install frontend dependencies
         run: npm ci
 
       # ==========================================================
-      # 10. Build Vite / React
+      # 10. Vite build
       # ==========================================================
       - name: Build frontend
         run: npm run build
 
       # ==========================================================
-      # 11. Vérifier le build
+      # 11. Verify build
       # ==========================================================
       - name: Verify frontend build
         run: |
-          if [ ! -d "public/build" ]; then
-            echo "ERROR: public/build does not exist"
-            exit 1
-          fi
+          set -euo pipefail
 
-          if [ ! -f "public/build/manifest.json" ]; then
-            echo "ERROR: public/build/manifest.json does not exist"
-            exit 1
-          fi
+          test -d public/build
+          test -f public/build/manifest.json
 
           echo "Frontend build OK"
 
       # ==========================================================
-      # 12. Préparer les fichiers publics
+      # 12. Package public files
       #
-      # IMPORTANT :
-      #
-      # public/index.php est volontairement exclu.
-      #
-      # Le index.php de Hostking contient des chemins spécifiques
-      # vers :
-      #
+      # index.php is excluded because Hostking uses
+      # a custom index.php pointing to:
       # /home/zwswegws/ferme-kabanda
-      #
-      # Il ne doit jamais être écrasé par GitHub.
       # ==========================================================
       - name: Package public assets
         run: |
+          set -euo pipefail
+
           tar \
             --exclude='./index.php' \
             -czf /tmp/ferme-kabanda-public.tar.gz \
             -C public .
 
-          echo "Public assets packaged"
-
           ls -lh /tmp/ferme-kabanda-public.tar.gz
 
       # ==========================================================
-      # 13. Configurer SSH GitHub -> Hostking
+      # 13. Configure SSH
+      #
+      # Required secrets:
+      #
+      # HOSTKING_HOST
+      # HOSTKING_PORT
+      # HOSTKING_USER
+      # HOSTKING_SSH_KEY
+      # HOSTKING_HOST_FINGERPRINT
       # ==========================================================
       - name: Configure SSH
         env:
           SSH_PRIVATE_KEY: ${{ secrets.HOSTKING_SSH_KEY }}
-          SSH_KNOWN_HOSTS: ${{ secrets.HOSTKING_KNOWN_HOSTS }}
+          HOST: ${{ secrets.HOSTKING_HOST }}
+          PORT: ${{ secrets.HOSTKING_PORT }}
+          EXPECTED_FINGERPRINT: ${{ secrets.HOSTKING_HOST_FINGERPRINT }}
         run: |
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
+          set -euo pipefail
 
-          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
 
-          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/known_hosts
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
 
-          echo "SSH configuration created"
+          ssh-keyscan \
+            -t ed25519 \
+            -p "$PORT" \
+            "$HOST" \
+            2>/dev/null > "$HOME/.ssh/known_hosts_candidate"
+
+          if [ ! -s "$HOME/.ssh/known_hosts_candidate" ]; then
+            echo "ERROR: Unable to retrieve Hostking SSH host key"
+            exit 1
+          fi
+
+          ACTUAL_FINGERPRINT="$(
+            ssh-keygen \
+              -lf "$HOME/.ssh/known_hosts_candidate" \
+              -E sha256 |
+            awk '{print $2}'
+          )"
+
+          echo "Expected fingerprint: $EXPECTED_FINGERPRINT"
+          echo "Actual fingerprint:   $ACTUAL_FINGERPRINT"
+
+          if [ "$ACTUAL_FINGERPRINT" != "$EXPECTED_FINGERPRINT" ]; then
+            echo "ERROR: Hostking SSH fingerprint mismatch"
+            exit 1
+          fi
+
+          mv \
+            "$HOME/.ssh/known_hosts_candidate" \
+            "$HOME/.ssh/known_hosts"
+
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+          echo "SSH configuration ready"
 
       # ==========================================================
-      # 14. Tester GitHub -> Hostking
+      # 14. Test SSH
       # ==========================================================
       - name: Test SSH connection
         env:
@@ -217,17 +220,21 @@ jobs:
           PORT: ${{ secrets.HOSTKING_PORT }}
           USER: ${{ secrets.HOSTKING_USER }}
         run: |
+          set -euo pipefail
+
           ssh \
-            -i ~/.ssh/id_ed25519 \
+            -i "$HOME/.ssh/id_ed25519" \
             -o IdentitiesOnly=yes \
             -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
             -o ConnectTimeout=20 \
             -p "$PORT" \
             "$USER@$HOST" \
             'echo "SSH connection successful"; whoami; pwd'
 
       # ==========================================================
-      # 15. Envoyer les assets compilés vers Hostking
+      # 15. Upload build
       # ==========================================================
       - name: Upload public assets
         env:
@@ -235,19 +242,21 @@ jobs:
           PORT: ${{ secrets.HOSTKING_PORT }}
           USER: ${{ secrets.HOSTKING_USER }}
         run: |
+          set -euo pipefail
+
           scp \
-            -i ~/.ssh/id_ed25519 \
+            -i "$HOME/.ssh/id_ed25519" \
             -o IdentitiesOnly=yes \
             -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
             -o ConnectTimeout=20 \
             -P "$PORT" \
             /tmp/ferme-kabanda-public.tar.gz \
             "$USER@$HOST:/home/zwswegws/ferme-kabanda-public-${GITHUB_SHA}.tar.gz"
 
-          echo "Public assets uploaded"
-
       # ==========================================================
-      # 16. Déploiement Laravel sur Hostking
+      # 16. Deploy Laravel
       # ==========================================================
       - name: Deploy Laravel
         env:
@@ -256,19 +265,17 @@ jobs:
           USER: ${{ secrets.HOSTKING_USER }}
         run: |
           ssh \
-            -i ~/.ssh/id_ed25519 \
+            -i "$HOME/.ssh/id_ed25519" \
             -o IdentitiesOnly=yes \
             -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
             -o ConnectTimeout=20 \
             -p "$PORT" \
             "$USER@$HOST" \
             "DEPLOY_SHA='$GITHUB_SHA' bash -s" <<'REMOTE_SCRIPT'
 
           set -Eeuo pipefail
-
-          # ======================================================
-          # Configuration Hostking
-          # ======================================================
 
           APP_DIR="/home/zwswegws/ferme-kabanda"
 
@@ -292,11 +299,7 @@ jobs:
           cd "$APP_DIR"
 
           # ======================================================
-          # Cleanup automatique
-          #
-          # Même en cas d'échec :
-          # - suppression fichiers temporaires
-          # - tentative de sortie du mode maintenance
+          # Automatic cleanup
           # ======================================================
 
           cleanup() {
@@ -322,7 +325,7 @@ jobs:
           trap cleanup EXIT
 
           # ======================================================
-          # Vérifications production
+          # Validate server
           # ======================================================
 
           echo "Checking production environment..."
@@ -361,8 +364,6 @@ jobs:
 
           # ======================================================
           # Git
-          #
-          # Hostking -> GitHub utilise la Deploy Key déjà créée.
           # ======================================================
 
           echo ""
@@ -371,13 +372,13 @@ jobs:
           git fetch --prune origin main
 
           echo ""
-          echo "Switching production to exact commit:"
-          echo "${DEPLOY_SHA}"
+          echo "Deploying commit:"
+          echo "$DEPLOY_SHA"
 
           git reset --hard "$DEPLOY_SHA"
 
           # ======================================================
-          # Maintenance Laravel
+          # Maintenance
           # ======================================================
 
           echo ""
@@ -386,13 +387,11 @@ jobs:
           php artisan down --retry=60 || true
 
           # ======================================================
-          # Composer production
-          #
-          # Ici --no-dev est volontaire.
+          # Composer
           # ======================================================
 
           echo ""
-          echo "Installing production Composer dependencies..."
+          echo "Installing production dependencies..."
 
           composer install \
               --no-dev \
@@ -402,7 +401,7 @@ jobs:
               --optimize-autoloader
 
           # ======================================================
-          # Cache Laravel
+          # Laravel cache
           # ======================================================
 
           echo ""
@@ -411,16 +410,16 @@ jobs:
           php artisan optimize:clear
 
           # ======================================================
-          # Migrations
+          # Database
           # ======================================================
 
           echo ""
-          echo "Running database migrations..."
+          echo "Running migrations..."
 
           php artisan migrate --force
 
           # ======================================================
-          # Extraction des assets générés sur GitHub
+          # Extract GitHub frontend build
           # ======================================================
 
           echo ""
@@ -437,12 +436,8 @@ jobs:
               exit 1
           fi
 
-          echo "Vite manifest verified"
-
           # ======================================================
-          # Déploiement atomique de public/build
-          #
-          # On prépare le nouveau build avant de retirer l'ancien.
+          # Atomic Vite deployment
           # ======================================================
 
           echo ""
@@ -464,32 +459,28 @@ jobs:
 
           rm -rf "$OLD_BUILD"
 
-          echo "Vite build deployed"
-
           # ======================================================
-          # Synchroniser les autres fichiers publics
+          # Sync other public files
           #
-          # index.php a été exclu de l'archive.
-          #
-          # Le index.php spécifique Hostking reste donc intact.
+          # index.php is not included in the archive.
           # ======================================================
 
           echo ""
-          echo "Synchronizing other public files..."
+          echo "Synchronizing public files..."
 
           cp -a "$STAGING_DIR/." "$PUBLIC_DIR/"
 
           # ======================================================
-          # Permissions Laravel
+          # Permissions
           # ======================================================
 
           echo ""
-          echo "Updating Laravel permissions..."
+          echo "Updating permissions..."
 
           chmod -R 775 storage bootstrap/cache || true
 
           # ======================================================
-          # Cache production
+          # Production caches
           # ======================================================
 
           echo ""
@@ -499,7 +490,7 @@ jobs:
           php artisan view:cache
 
           # ======================================================
-          # Remise en ligne
+          # Application up
           # ======================================================
 
           echo ""
@@ -508,7 +499,7 @@ jobs:
           php artisan up
 
           # ======================================================
-          # Nettoyage
+          # Cleanup
           # ======================================================
 
           echo ""
