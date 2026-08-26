@@ -170,7 +170,24 @@ class InventoryTest extends TestCase
             $table->unique(['user_id', 'code']);
         });
 
+        // Simule l'échec MySQL pendant l'ajout de l'index unique au CREATE TABLE.
+        Schema::create('inventory_count_lines', function (Blueprint $table): void {
+            $table->id();
+            $table->unsignedBigInteger('inventory_count_id');
+            $table->unsignedBigInteger('inventory_item_id');
+            $table->decimal('expected_quantity', 14, 3);
+            $table->decimal('counted_quantity', 14, 3)->nullable();
+            $table->text('notes')->nullable();
+            $table->timestamps();
+        });
+
         $migration->up();
+
+        $this->assertTrue(Schema::hasIndex(
+            'inventory_count_lines',
+            'inv_count_lines_count_item_unique',
+            'unique',
+        ));
 
         $this->assertDatabaseHas('inventory_items', [
             'user_id' => $user->id,

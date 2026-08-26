@@ -117,7 +117,23 @@ return new class extends Migration
                 $table->decimal('counted_quantity', 14, 3)->nullable();
                 $table->text('notes')->nullable();
                 $table->timestamps();
-                $table->unique(['inventory_count_id', 'inventory_item_id']);
+                $table->unique(
+                    ['inventory_count_id', 'inventory_item_id'],
+                    'inv_count_lines_count_item_unique',
+                );
+            });
+        }
+
+        if (! Schema::hasIndex(
+            'inventory_count_lines',
+            ['inventory_count_id', 'inventory_item_id'],
+            'unique',
+        )) {
+            Schema::table('inventory_count_lines', function (Blueprint $table) {
+                $table->unique(
+                    ['inventory_count_id', 'inventory_item_id'],
+                    'inv_count_lines_count_item_unique',
+                );
             });
         }
 
