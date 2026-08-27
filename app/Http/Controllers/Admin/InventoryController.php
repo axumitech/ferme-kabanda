@@ -3,14 +3,15 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\InventoryCategory;
-use App\Models\InventoryItem;
-use App\Models\InventoryMovement;
+use App\Models\Article;
 use App\Models\MaterialAssignment;
+use App\Models\MouvementStock;
 use App\Models\ProductStock;
 use App\Models\ProductStockMovement;
 use App\Models\ReferenceItem;
+use App\Models\Unite;
 use App\Models\User;
+use App\Services\MagasinService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -26,11 +27,23 @@ class InventoryController extends Controller
     {
         $this->ensureAdmin($request);
 
-        $items = InventoryItem::query()
-            ->with(['user:id,name', 'category:id,code,name'])
-            ->orderByDesc('active')->orderBy('code')->get();
+        $items = Article::query()
+            ->with(['uniteUsage:id,code,nom,dimension,vers_base,conditionnement', 'uniteAchat:id,code,nom,dimension,vers_base,conditionnement'])
+            ->orderByDesc('actif')->orderBy('code')->get()
+            ->map(fn (Article $article): array => $this->articlePayload($article));
         $stocks = ProductStock::query()
             ->with('user:id,name')->orderByDesc('active')->orderBy('product_name')->get();
+        $lowItemsCount = Article::query()
+            ->join('unites as unite_usage', 'unite_usage.id', '=', 'articles.unite_usage_id')
+            ->where('articles.actif', true)
+            ->whereNotNull('articles.seuil_min')
+            ->whereRaw('articles.quantite_base <= articles.seuil_min * unite_usage.vers_base')
+            ->count('articles.id');
+        $inventoryValue = Article::query()
+            ->join('unites as unite_achat', 'unite_achat.id', '=', 'articles.unite_achat_id')
+            ->where('articles.actif', true)
+            ->selectRaw('coalesce(sum((articles.quantite_base / nullif(unite_achat.vers_base, 0)) * coalesce(articles.prix_unitaire, 0)), 0) as total')
+            ->value('total');
 
         return Inertia::render('admin/inventory', [
             'items' => $items,
@@ -38,9 +51,20 @@ class InventoryController extends Controller
             'assignments' => MaterialAssignment::query()
                 ->with(['user:id,name', 'assignee.memberAccount:id,name,reference_item_id'])
                 ->orderBy('is_replaced')->orderByDesc('assigned_on')->get(),
-            'inventoryMovements' => InventoryMovement::query()
-                ->with(['item:id,code,name', 'actor:id,name'])
-                ->latest('occurred_at')->limit(30)->get(),
+            'inventoryMovements' => MouvementStock::query()
+                ->with(['article:id,code,libelle', 'auteur:id,name'])
+                ->latest('created_at')->limit(30)->get()
+                ->map(fn (MouvementStock $movement): array => [
+                    'id' => $movement->id,
+                    'movement_type' => $movement->type,
+                    'quantity_change' => (string) $movement->quantite_base,
+                    'quantity_before' => '0',
+                    'quantity_after' => '0',
+                    'notes' => $movement->motif,
+                    'occurred_at' => $movement->created_at,
+                    'actor' => $movement->auteur ? ['id' => $movement->auteur->id, 'name' => $movement->auteur->name] : null,
+                    'item' => $movement->article ? ['code' => $movement->article->code, 'name' => $movement->article->libelle] : null,
+                ]),
             'productMovements' => ProductStockMovement::query()
                 ->with(['stock:id,product_name', 'actor:id,name'])
                 ->latest('occurred_at')->limit(30)->get(),
@@ -52,61 +76,54 @@ class InventoryController extends Controller
                 ->where('category', 'epi_types')->where('active', true)
                 ->orderBy('label')->get(['id', 'label']),
             'stats' => [
-                'activeItems' => $items->where('active', true)->count(),
-                'inventoryValue' => $items->where('active', true)->sum(fn (InventoryItem $item): float => (float) $item->quantity_on_hand * (float) $item->unit_price),
-                'lowItems' => $items->where('active', true)->filter(fn (InventoryItem $item): bool => $item->minimum_quantity !== null && (float) $item->quantity_on_hand <= (float) $item->minimum_quantity)->count(),
-                'activeProducts' => $stocks->where('active', true)->count(),
+                'activeItems' => Article::query()->where('actif', true)->count(),
+                'inventoryValue' => (float) $inventoryValue,
+                'lowItems' => $lowItemsCount,
+                'activeProducts' => ProductStock::query()->where('active', true)->count(),
                 'activeAssignments' => MaterialAssignment::query()->where('is_replaced', false)->count(),
                 'expiredAssignments' => MaterialAssignment::query()->where('is_replaced', false)->whereDate('expires_on', '<', today())->count(),
             ],
         ]);
     }
 
-    public function storeItem(Request $request): RedirectResponse
+    public function storeItem(Request $request, MagasinService $magasin): RedirectResponse
     {
         $this->ensureAdmin($request);
         $data = $request->validate([
-            'user_id' => ['required', 'integer', 'exists:users,id'],
             'category_code' => ['required', 'string', 'max:20'],
-            'category_name' => ['required', 'string', 'max:120'],
-            'code' => ['required', 'string', 'max:60', Rule::unique('inventory_items')->where('user_id', $request->integer('user_id'))],
+            'code' => ['required', 'string', 'max:60', Rule::unique('articles', 'code')],
             'name' => ['required', 'string', 'max:180'],
             'unit' => ['required', 'string', 'max:40'],
-            'quantity' => ['required', 'numeric', 'min:0', 'max:99999999999.999'],
+            'quantity' => ['required', 'numeric', 'min:0', 'max:99999999999.9999'],
             'unit_price' => ['required', 'numeric', 'min:0', 'max:999999999999.99'],
             'minimum_quantity' => ['nullable', 'numeric', 'min:0'],
             'cost_center' => ['nullable', 'string', 'max:30'],
         ]);
 
-        DB::transaction(function () use ($data, $request): void {
-            User::query()->whereKey($data['user_id'])->lockForUpdate()->firstOrFail();
-            $category = InventoryCategory::query()->firstOrCreate(
-                ['user_id' => $data['user_id'], 'code' => $data['category_code']],
-                ['name' => $data['category_name']],
-            );
-            $item = InventoryItem::query()->create([
-                'user_id' => $data['user_id'],
-                'inventory_category_id' => $category->id,
-                'code' => $data['code'], 'name' => $data['name'], 'unit' => $data['unit'],
-                'quantity_on_hand' => $data['quantity'], 'unit_price' => $data['unit_price'],
-                'minimum_quantity' => $data['minimum_quantity'] ?? null,
-                'cost_center' => $data['cost_center'] ?? null, 'created_on' => today(), 'active' => true,
+        DB::transaction(function () use ($data, $magasin): void {
+            $unit = $this->resolveUnit((string) $data['unit']);
+            $article = Article::query()->create([
+                'code' => $data['code'],
+                'categorie' => $data['category_code'],
+                'libelle' => $data['name'],
+                'unite_achat_id' => $unit->id,
+                'unite_usage_id' => $unit->id,
+                'prix_unitaire' => $data['unit_price'],
+                'seuil_min' => $data['minimum_quantity'] ?? null,
+                'centre_cout' => $data['cost_center'] ?? null,
+                'quantite_base' => 0,
+                'actif' => true,
             ]);
+
             if ((float) $data['quantity'] > 0) {
-                InventoryMovement::query()->create([
-                    'user_id' => $data['user_id'], 'inventory_item_id' => $item->id,
-                    'actor_user_id' => $request->user()->id, 'movement_type' => 'opening_balance',
-                    'quantity_change' => $data['quantity'], 'quantity_before' => 0,
-                    'quantity_after' => $data['quantity'], 'notes' => 'Création depuis l’administration',
-                    'metadata' => ['source' => 'admin'], 'occurred_at' => now(),
-                ]);
+                $magasin->entree($article, (float) $data['quantity'], $unit, 'Création depuis l’administration');
             }
         }, 3);
 
         return back()->with('success', 'Article ajouté au magasin.');
     }
 
-    public function adjustItem(Request $request, InventoryItem $inventoryItem): RedirectResponse
+    public function adjustItem(Request $request, Article $article, MagasinService $magasin): RedirectResponse
     {
         $this->ensureAdmin($request);
         $data = $request->validate([
@@ -114,34 +131,33 @@ class InventoryController extends Controller
             'reason' => ['required', 'string', 'max:1000'],
         ]);
 
-        DB::transaction(function () use ($inventoryItem, $data, $request): void {
-            $item = InventoryItem::query()->lockForUpdate()->findOrFail($inventoryItem->id);
-            $before = (float) $item->quantity_on_hand;
+        DB::transaction(function () use ($article, $data, $magasin): void {
+            $item = Article::query()->with('uniteUsage')->lockForUpdate()->findOrFail($article->id);
             $change = round((float) $data['quantity_change'], 3);
-            $after = round($before + $change, 3);
-            if ($after < 0) {
+
+            if ($change > 0) {
+                $magasin->entree($item, $change, $item->uniteUsage, $data['reason']);
+
+                return;
+            }
+
+            try {
+                $magasin->sortie($item, abs($change), $item->uniteUsage, $data['reason']);
+            } catch (\RuntimeException) {
                 throw ValidationException::withMessages(['quantity_change' => 'Le stock ne peut pas devenir négatif.']);
             }
-            $item->update(['quantity_on_hand' => $after]);
-            InventoryMovement::query()->create([
-                'user_id' => $item->user_id, 'inventory_item_id' => $item->id,
-                'actor_user_id' => $request->user()->id,
-                'movement_type' => $change > 0 ? 'admin_entry' : 'admin_exit',
-                'quantity_change' => $change, 'quantity_before' => $before, 'quantity_after' => $after,
-                'notes' => $data['reason'], 'metadata' => ['source' => 'admin'], 'occurred_at' => now(),
-            ]);
         }, 3);
 
         return back()->with('success', 'Mouvement d’article enregistré.');
     }
 
-    public function archiveItem(Request $request, InventoryItem $inventoryItem): RedirectResponse
+    public function archiveItem(Request $request, Article $article): RedirectResponse
     {
         $this->ensureAdmin($request);
-        if ((float) $inventoryItem->quantity_on_hand !== 0.0) {
+        if ((float) $article->quantite_base !== 0.0) {
             return back()->withErrors(['archive' => 'Ramenez d’abord la quantité à zéro pour archiver cet article.']);
         }
-        $inventoryItem->update(['active' => false]);
+        $article->update(['actif' => false]);
 
         return back()->with('success', 'Article archivé sans supprimer son historique.');
     }
@@ -268,5 +284,42 @@ class InventoryController extends Controller
     private function ensureAdmin(Request $request): void
     {
         abort_unless($request->user()?->is_admin, 403);
+    }
+
+    /** @return array<string, mixed> */
+    private function articlePayload(Article $article): array
+    {
+        return [
+            'id' => $article->id,
+            'code' => $article->code,
+            'name' => $article->libelle,
+            'unit' => $article->uniteUsage->code,
+            'quantity_on_hand' => number_format($article->stockUsage(), 3, '.', ''),
+            'unit_price' => (string) ($article->prix_unitaire ?? '0'),
+            'minimum_quantity' => $article->seuil_min,
+            'cost_center' => $article->centre_cout,
+            'active' => $article->actif,
+            'user' => ['id' => 0, 'name' => 'Magasin central'],
+            'category' => [
+                'code' => $article->categorie,
+                'name' => Article::CATEGORIES[$article->categorie] ?? $article->categorie,
+            ],
+        ];
+    }
+
+    private function resolveUnit(string $rawUnit): Unite
+    {
+        $code = match ($rawUnit) {
+            'litre' => 'l',
+            'sac 50 kg' => 'sac_50kg',
+            'sac 25 kg' => 'sac_25kg',
+            'pièce' => 'piece',
+            'bidon' => 'bidon_5l',
+            'boîte' => 'boite_12',
+            'mètre' => 'm',
+            default => $rawUnit,
+        };
+
+        return Unite::query()->where('code', $code)->firstOrFail();
     }
 }

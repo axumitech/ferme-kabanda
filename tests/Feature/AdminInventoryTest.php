@@ -2,9 +2,9 @@
 
 namespace Tests\Feature;
 
-use App\Models\InventoryItem;
-use App\Models\InventoryMovement;
+use App\Models\Article;
 use App\Models\MaterialAssignment;
+use App\Models\MouvementStock;
 use App\Models\ProductStock;
 use App\Models\ReferenceItem;
 use App\Models\User;
@@ -41,19 +41,19 @@ class AdminInventoryTest extends TestCase
             'cost_center' => 'EXA',
         ])->assertRedirect();
 
-        $item = InventoryItem::query()->where('code', 'OUT-901')->firstOrFail();
-        $this->assertSame('5.000', $item->quantity_on_hand);
-        $this->assertDatabaseHas('inventory_movements', [
-            'inventory_item_id' => $item->id,
-            'actor_user_id' => $admin->id,
-            'movement_type' => 'opening_balance',
+        $item = Article::query()->where('code', 'OUT-901')->firstOrFail();
+        $this->assertSame('5.000000', $item->quantite_base);
+        $this->assertDatabaseHas('mouvements_stock', [
+            'article_id' => $item->id,
+            'user_id' => $admin->id,
+            'type' => 'entree',
         ]);
 
         $this->actingAs($admin)->post(route('admin.inventory.items.adjust', $item), [
             'quantity_change' => -2,
             'reason' => 'Remise à l’équipe terrain',
         ])->assertRedirect();
-        $this->assertSame('3.000', $item->fresh()->quantity_on_hand);
+        $this->assertSame('3.000000', $item->fresh()->quantite_base);
 
         $this->actingAs($admin)->delete(route('admin.inventory.items.archive', $item))
             ->assertSessionHasErrors('archive');
@@ -64,8 +64,8 @@ class AdminInventoryTest extends TestCase
         ])->assertRedirect();
         $this->actingAs($admin)->delete(route('admin.inventory.items.archive', $item))->assertRedirect();
 
-        $this->assertFalse($item->fresh()->active);
-        $this->assertSame(3, InventoryMovement::query()->where('inventory_item_id', $item->id)->count());
+        $this->assertFalse($item->fresh()->actif);
+        $this->assertSame(3, MouvementStock::query()->where('article_id', $item->id)->count());
     }
 
     public function test_admin_can_manage_product_stock_and_material_assignments(): void

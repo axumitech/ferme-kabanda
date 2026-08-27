@@ -3,6 +3,7 @@ export type User = {
     name: string;
     email: string | null;
     phone?: string | null;
+    locale?: 'fr' | 'en';
     avatar?: string;
     email_verified_at: string | null;
     two_factor_enabled?: boolean;

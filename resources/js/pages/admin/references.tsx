@@ -14,6 +14,7 @@ import {
     Users,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { useConfirmDialog } from '@/hooks/use-confirm-dialog';
 import { AdminLayout } from './AdminLayout';
 
 type Item = {
@@ -39,6 +40,7 @@ type Props = {
 };
 
 export default function ReferencesAdmin({ categories, items, stats }: Props) {
+    const { confirm, ConfirmDialog } = useConfirmDialog();
     const { auth } = usePage().props;
     const [category, setCategory] = useState(Object.keys(categories)[0]);
     const [query, setQuery] = useState('');
@@ -146,8 +148,13 @@ export default function ReferencesAdmin({ categories, items, stats }: Props) {
         });
     };
 
-    const remove = (item: Item) => {
-        if (window.confirm(`Supprimer « ${item.label} » du référentiel ?`)) {
+    const remove = async (item: Item) => {
+        if (await confirm({ 
+            title: 'Confirmation de suppression',
+            description: `Supprimer « ${item.label} » du référentiel ?`,
+            confirmText: 'Supprimer',
+            variant: 'destructive'
+        })) {
             router.delete(`/admin/references/${item.id}`, {
                 preserveScroll: true,
             });
@@ -159,6 +166,7 @@ export default function ReferencesAdmin({ categories, items, stats }: Props) {
             title="Référentiels opérationnels"
             subtitle="Les modifications faites ici alimentent directement les listes de la homepage."
         >
+            <ConfirmDialog />
             <Head title="Administration des référentiels" />
             
             <div className="admin-animate-in">
@@ -176,7 +184,7 @@ export default function ReferencesAdmin({ categories, items, stats }: Props) {
                     ))}
                 </div>
 
-                <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
+                <div className="grid min-w-0 gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
                     <aside className="admin-sidebar-nav">
                         <div className="admin-sidebar-nav-inner">
                             <Link
@@ -232,6 +240,9 @@ export default function ReferencesAdmin({ categories, items, stats }: Props) {
                                         <option key={key} value={key}>{label}</option>
                                     ))}
                                 </select>
+                                <p className="admin-form-hint">
+                                    Ces éléments alimentent les listes visibles dans le terrain, les tâches et les rapports.
+                                </p>
                             </div>
                             
                             <div className="admin-form-grid md:grid-cols-[1fr_120px]">
@@ -244,8 +255,11 @@ export default function ReferencesAdmin({ categories, items, stats }: Props) {
                                         placeholder={currentHint.placeholder}
                                     />
                                     {form.errors.label && (
-                                        <span className="text-[11px] text-[#c0392b] font-medium">{form.errors.label}</span>
+                                        <span className="admin-form-error">{form.errors.label}</span>
                                     )}
+                                    <p className="admin-form-hint">
+                                        Exemple attendu : nom d’agent, parcelle, culture, produit, tâche ou type d’EPI selon la catégorie.
+                                    </p>
                                 </div>
                                 <div className="admin-field">
                                     <label>Ordre</label>
@@ -255,6 +269,7 @@ export default function ReferencesAdmin({ categories, items, stats }: Props) {
                                         value={form.data.sort_order}
                                         onChange={(e) => form.setData('sort_order', Number(e.target.value))}
                                     />
+                                    <p className="admin-form-hint">Plus le nombre est petit, plus l’élément apparaît haut.</p>
                                 </div>
                             </div>
                             
@@ -277,7 +292,7 @@ export default function ReferencesAdmin({ categories, items, stats }: Props) {
                                     />
                                     Visible dans l’application
                                 </label>
-                                <div className="flex gap-2">
+                                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
                                     {editing && (
                                         <button
                                             type="button"

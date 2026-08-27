@@ -1,6 +1,7 @@
 import { Link, usePage } from '@inertiajs/react';
 import {
     Boxes,
+    ClipboardCheck,
     FileText,
     LayoutGrid,
     Map,
@@ -26,6 +27,12 @@ const navItems: NavItem[] = [
         label: 'Stocks',
         icon: Boxes,
         match: ['/admin/inventory'],
+    },
+    {
+        href: '/admin/operations',
+        label: 'Opérations',
+        icon: ClipboardCheck,
+        match: ['/admin/operations'],
     },
     {
         href: '/admin/reports',
@@ -69,6 +76,7 @@ export function AdminLayout({ children, title, subtitle }: Props) {
     // Find the active nav item for exact matching
     const activeItem = navItems.find((item) => {
         if (url.startsWith('/admin/inventory')) return item.href === '/admin/inventory';
+        if (url.startsWith('/admin/operations')) return item.href === '/admin/operations';
         if (url.startsWith('/admin/reports')) return item.href === '/admin/reports';
         if (url.startsWith('/admin/map')) return item.href === '/admin/map';
         if (url.startsWith('/admin/members')) return item.href === '/admin/members';

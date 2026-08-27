@@ -2,12 +2,15 @@
 
 namespace App\Models;
 
+use App\Concerns\EstImmuable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /** @property int $id */
 class InventoryMovement extends Model
 {
+    use EstImmuable;
+
     protected $fillable = [
         'user_id',
         'inventory_item_id',

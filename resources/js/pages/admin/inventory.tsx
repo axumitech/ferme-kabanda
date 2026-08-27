@@ -15,6 +15,7 @@ import {
     Warehouse,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { useConfirmDialog } from '@/hooks/use-confirm-dialog';
 import { AdminLayout } from './AdminLayout';
 
 type User = { id: number; name: string };
@@ -67,6 +68,12 @@ type Movement = {
     item?: { code: string; name: string };
     stock?: { product_name: string };
 };
+type MovementTarget = {
+    kind: 'items' | 'products';
+    id: number;
+    label: string;
+    unit?: string | null;
+};
 type Props = {
     items: Item[];
     stocks: ProductStock[];
@@ -102,28 +109,37 @@ const categories: Record<string, string> = {
     DIV: 'Divers',
 };
 const units = [
+    'g',
     'kg',
+    't',
     'litre',
     'sac 50 kg',
     'sac 25 kg',
+    'ml',
     'pièce',
     'bidon',
+    'fut_200l',
     'boîte',
+    'carton_24',
     'paire',
+    'mm',
     'mètre',
+    'rouleau_100m',
 ];
 
 export default function InventoryAdmin(props: Props) {
+    const { confirm, ConfirmDialog } = useConfirmDialog();
     const [tab, setTab] = useState<
         'items' | 'products' | 'assignments' | 'history'
     >('items');
     const [query, setQuery] = useState('');
     const [showForm, setShowForm] = useState(false);
+    const [movementTarget, setMovementTarget] = useState<MovementTarget | null>(null);
+    const [endingAssignment, setEndingAssignment] = useState<Assignment | null>(null);
     const today = new Date().toISOString().slice(0, 10);
     const defaultUser = props.users[0]?.id ?? 0;
 
     const itemForm = useForm({
-        user_id: defaultUser,
         category_code: 'ENG',
         category_name: categories.ENG,
         code: '',
@@ -148,6 +164,13 @@ export default function InventoryAdmin(props: Props) {
         size: '',
         assigned_on: today,
         expires_on: '',
+        reason: '',
+    });
+    const movementForm = useForm({
+        quantity_change: '',
+        reason: '',
+    });
+    const assignmentEndForm = useForm({
         reason: '',
     });
 
@@ -179,37 +202,19 @@ export default function InventoryAdmin(props: Props) {
         [props.assignments, query],
     );
 
-    const adjust = (kind: 'items' | 'products', id: number, label: string) => {
-        const raw = window.prompt(
-            `Variation pour « ${label} »\nExemples : 10 pour une entrée, -3 pour une sortie`,
-        );
-
-        if (
-            raw === null ||
-            !raw.trim() ||
-            Number(raw) === 0 ||
-            Number.isNaN(Number(raw))
-        ) {
-            return;
-        }
-
-        const reason = window.prompt('Motif obligatoire de ce mouvement :');
-
-        if (!reason?.trim()) {
-            return;
-        }
-
-        router.post(
-            `/admin/inventory/${kind}/${id}/adjust`,
-            { quantity_change: Number(raw), reason },
-            { preserveScroll: true },
-        );
+    const adjust = (target: MovementTarget) => {
+        setMovementTarget(target);
+        setEndingAssignment(null);
+        movementForm.setData({ quantity_change: '', reason: '' });
     };
-    const archive = (kind: 'items' | 'products', id: number, label: string) => {
+    const archive = async (kind: 'items' | 'products', id: number, label: string) => {
         if (
-            window.confirm(
-                `Archiver « ${label} » ? Le stock doit être à zéro et l’historique sera conservé.`,
-            )
+            await confirm({
+                title: 'Confirmation d\'archivage',
+                description: `Archiver « ${label} » ? Le stock doit être à zéro et l’historique sera conservé.`,
+                confirmText: 'Archiver',
+                variant: 'destructive',
+            })
         ) {
             router.delete(`/admin/inventory/${kind}/${id}`, {
                 preserveScroll: true,
@@ -217,17 +222,33 @@ export default function InventoryAdmin(props: Props) {
         }
     };
     const endAssignment = (assignment: Assignment) => {
-        const reason = window.prompt(
-            `Pourquoi retirer ${assignment.material_name} à ${assignment.assignee_name} ?`,
-        );
+        setEndingAssignment(assignment);
+        setMovementTarget(null);
+        assignmentEndForm.setData({ reason: '' });
+    };
+    const submitMovement = (event: React.FormEvent) => {
+        event.preventDefault();
+        if (!movementTarget) return;
 
-        if (reason?.trim()) {
-            router.post(
-                `/admin/inventory/assignments/${assignment.id}/end`,
-                { reason },
-                { preserveScroll: true },
-            );
-        }
+        movementForm.post(`/admin/inventory/${movementTarget.kind}/${movementTarget.id}/adjust`, {
+            preserveScroll: true,
+            onSuccess: () => {
+                movementForm.reset('quantity_change', 'reason');
+                setMovementTarget(null);
+            },
+        });
+    };
+    const submitAssignmentEnd = (event: React.FormEvent) => {
+        event.preventDefault();
+        if (!endingAssignment) return;
+
+        assignmentEndForm.post(`/admin/inventory/assignments/${endingAssignment.id}/end`, {
+            preserveScroll: true,
+            onSuccess: () => {
+                assignmentEndForm.reset('reason');
+                setEndingAssignment(null);
+            },
+        });
     };
 
     const cards = [
@@ -267,9 +288,10 @@ export default function InventoryAdmin(props: Props) {
 
     return (
         <AdminLayout
-            title="Stocks, inventaire et matériels"
-            subtitle="Gérez l'ensemble de vos ressources"
+            title="Magasin et matériels"
+            subtitle="Le magasin devient la source unique des intrants, articles et mouvements de stock."
         >
+            <ConfirmDialog />
             <Head title="Stocks et matériels — Administration" />
             
             <div className="admin-animate-in">
@@ -298,8 +320,8 @@ export default function InventoryAdmin(props: Props) {
                     <div className="admin-tabs">
                         {(
                             [
-                                ['items', 'Articles magasin', Boxes],
-                                ['products', 'Produits agricoles', Warehouse],
+                                ['items', 'Magasin', Boxes],
+                                ['products', 'Productions suivies', Warehouse],
                                 [
                                     'assignments',
                                     'Matériels attribués',
@@ -313,6 +335,8 @@ export default function InventoryAdmin(props: Props) {
                                 onClick={() => {
                                     setTab(key);
                                     setShowForm(false);
+                                    setMovementTarget(null);
+                                    setEndingAssignment(null);
                                 }}
                                 className={`admin-tab ${tab === key ? 'admin-tab--active' : ''}`}
                             >
@@ -345,13 +369,11 @@ export default function InventoryAdmin(props: Props) {
                         }}
                         className="admin-form-panel mb-6"
                     >
+                        <div className="mb-5 rounded-lg border border-[#dfe6dc] bg-[#fbfaf7] p-4 text-sm leading-6 text-[#425047]">
+                            Un article appartient maintenant au magasin central. Les entrées et sorties se font ensuite depuis le bouton
+                            <span className="font-semibold text-[#17352a]"> Entrée / sortie</span>, avec un motif obligatoire.
+                        </div>
                         <div className="admin-form-grid md:grid-cols-3 xl:grid-cols-5">
-                            <FormSelect
-                                label="Responsable / compte"
-                                value={itemForm.data.user_id}
-                                onChange={(v) => itemForm.setData('user_id', Number(v))}
-                                options={props.users.map((u) => [u.id, u.name])}
-                            />
                             <FormSelect
                                 label="Catégorie"
                                 value={itemForm.data.category_code}
@@ -532,6 +554,95 @@ export default function InventoryAdmin(props: Props) {
                     </form>
                 )}
 
+                {movementTarget && (
+                    <form onSubmit={submitMovement} className="admin-form-panel mb-6 border-[#cfe0cf] bg-[#fbfff9]">
+                        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                                <div className="admin-section-eyebrow">Mouvement magasin</div>
+                                <h3 className="admin-section-title text-[20px]">{movementTarget.label}</h3>
+                                <p className="admin-section-desc mb-0">
+                                    Saisissez une quantité positive pour une entrée, négative pour une sortie.
+                                </p>
+                            </div>
+                            <button type="button" className="admin-btn-secondary" onClick={() => setMovementTarget(null)}>
+                                Annuler
+                            </button>
+                        </div>
+                        <div className="admin-form-grid md:grid-cols-[220px_minmax(0,1fr)_auto]">
+                            <div className="admin-field">
+                                <label>Variation</label>
+                                <input
+                                    required
+                                    type="number"
+                                    step="0.001"
+                                    value={movementForm.data.quantity_change}
+                                    onChange={(event) => movementForm.setData('quantity_change', event.target.value)}
+                                    placeholder={`Ex: 10 ou -3${movementTarget.unit ? ` ${movementTarget.unit}` : ''}`}
+                                />
+                                <p className="admin-form-hint">Quantité positive = entrée, quantité négative = sortie.</p>
+                                {movementForm.errors.quantity_change && (
+                                    <span className="admin-form-error">{movementForm.errors.quantity_change}</span>
+                                )}
+                            </div>
+                            <div className="admin-field">
+                                <label>Motif obligatoire</label>
+                                <input
+                                    required
+                                    value={movementForm.data.reason}
+                                    onChange={(event) => movementForm.setData('reason', event.target.value)}
+                                    placeholder="Réception fournisseur, sortie terrain, correction inventaire..."
+                                />
+                                <p className="admin-form-hint">Le motif rend le mouvement traçable et auditable.</p>
+                                {movementForm.errors.reason && (
+                                    <span className="admin-form-error">{movementForm.errors.reason}</span>
+                                )}
+                            </div>
+                            <div className="flex flex-col justify-end">
+                                <button type="submit" disabled={movementForm.processing} className="admin-btn-submit h-11 px-4">
+                                    Enregistrer
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                )}
+
+                {endingAssignment && (
+                    <form onSubmit={submitAssignmentEnd} className="admin-form-panel mb-6 border-amber-200 bg-amber-50/50">
+                        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                                <div className="admin-section-eyebrow">Retrait matériel</div>
+                                <h3 className="admin-section-title text-[20px]">{endingAssignment.material_name}</h3>
+                                <p className="admin-section-desc mb-0">
+                                    Retrait à {endingAssignment.assignee_name}. Le motif sera conservé dans l’historique.
+                                </p>
+                            </div>
+                            <button type="button" className="admin-btn-secondary" onClick={() => setEndingAssignment(null)}>
+                                Annuler
+                            </button>
+                        </div>
+                        <div className="admin-form-grid md:grid-cols-[1fr_auto]">
+                            <div className="admin-field">
+                                <label>Motif du retrait</label>
+                                <input
+                                    required
+                                    value={assignmentEndForm.data.reason}
+                                    onChange={(event) => assignmentEndForm.setData('reason', event.target.value)}
+                                    placeholder="Remplacement, fin de contrat, matériel rendu..."
+                                />
+                                <p className="admin-form-hint">Ce retrait n’efface pas l’attribution : il clôture son historique.</p>
+                                {assignmentEndForm.errors.reason && (
+                                    <span className="admin-form-error">{assignmentEndForm.errors.reason}</span>
+                                )}
+                            </div>
+                            <div className="flex flex-col justify-end">
+                                <button type="submit" disabled={assignmentEndForm.processing} className="admin-btn-submit h-11 px-4">
+                                    Confirmer le retrait
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                )}
+
                 {tab !== 'history' && (
                     <div className="admin-search mb-4">
                         <Search size={16} />
@@ -546,14 +657,14 @@ export default function InventoryAdmin(props: Props) {
                 {tab === 'items' && (
                     <ItemTable
                         items={filteredItems}
-                        onAdjust={(i) => adjust('items', i.id, i.name)}
+                        onAdjust={(i) => adjust({ kind: 'items', id: i.id, label: i.name, unit: i.unit })}
                         onArchive={(i) => archive('items', i.id, i.name)}
                     />
                 )}
                 {tab === 'products' && (
                     <ProductTable
                         stocks={filteredStocks}
-                        onAdjust={(s) => adjust('products', s.id, s.product_name)}
+                        onAdjust={(s) => adjust({ kind: 'products', id: s.id, label: s.product_name, unit: s.unit })}
                         onArchive={(s) => archive('products', s.id, s.product_name)}
                     />
                 )}
@@ -940,7 +1051,7 @@ function HistoryTable({
                 'Type',
                 'Élément',
                 'Variation',
-                'Avant → après',
+                'Registre',
                 'Auteur / motif',
             ]}
         >
@@ -978,7 +1089,7 @@ function HistoryTable({
                         </Cell>
                         <Cell>
                             <span className="text-[13.5px] text-[#4a5750]">
-                                {m.quantity_before} <span className="text-[#9aaa9f]">→</span> {m.quantity_after}
+                                {m.family === 'Article' ? 'Somme des mouvements' : `${m.quantity_before} → ${m.quantity_after}`}
                             </span>
                         </Cell>
                         <Cell>

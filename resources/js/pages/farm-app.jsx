@@ -1,6 +1,7 @@
 /* eslint-disable */
 import React, { useState, useEffect } from 'react';
 import { Head, router, usePage } from '@inertiajs/react';
+import { offlineQueue } from '@/lib/offline-queue';
 
 const csrfToken = () =>
     document
@@ -63,19 +64,37 @@ window.storage = {
                   ? { stocks: JSON.parse(value) }
                   : { assignments: JSON.parse(value) }
             : { value };
-        const response = await fetch(
-            normalizedEndpoint || `/farm-data/${encodeURIComponent(key)}`,
-            {
+        const endpoint = normalizedEndpoint || `/farm-data/${encodeURIComponent(key)}`;
+
+        if (!navigator.onLine) {
+            offlineQueue.enqueue({
                 method: 'PUT',
-                credentials: 'same-origin',
-                headers: {
-                    Accept: 'application/json',
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': csrfToken(),
-                },
-                body: JSON.stringify(payload),
+                url: endpoint,
+                payload,
+                label: `Sauvegarde terrain : ${key}`,
+            });
+            return { queued: true };
+        }
+
+        const response = await fetch(endpoint, {
+            method: 'PUT',
+            credentials: 'same-origin',
+            headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrfToken(),
             },
-        );
+            body: JSON.stringify(payload),
+        });
+        if (!response.ok && !navigator.onLine) {
+            offlineQueue.enqueue({
+                method: 'PUT',
+                url: endpoint,
+                payload,
+                label: `Sauvegarde terrain : ${key}`,
+            });
+            return { queued: true };
+        }
         if (!response.ok) throw new Error('Enregistrement impossible');
         return response.json();
     },
@@ -1071,6 +1090,126 @@ const TYPES_REQ = {
 };
 const STATUTS_REQ = ['Demandée', 'Approuvée', 'Servie', 'Refusée', 'Annulée'];
 
+/* ══ REPRODUCTION PORCINE — reprise de la version terrain fournie ══ */
+const COHORTES = [
+    { c: 'Blanche', pere: 'V01' },
+    { c: 'Orange', pere: 'V02' },
+    { c: 'À définir', pere: 'V03' },
+];
+const VERRATS = ['V01', 'V02', 'V03', 'Verrat terminal (ligne jaune)'];
+const GESTATION = 114;
+const SEVRAGE_CIBLE = 28;
+const SEVRAGE_MIN = 21;
+const SEVRAGE_MAX = 35;
+const POIDS_SEVRAGE_MIN = 6;
+const ORIGINES = ['Née sur le site', 'Achetée', 'Don ou échange'];
+const MOTIFS_REFORME = [
+    'Âge / nombre de portées',
+    'Infertilité répétée',
+    'Prolificité insuffisante',
+    'Aptitude maternelle insuffisante',
+    'Boiterie ou blessure',
+    'Maladie chronique',
+    'Vente comme reproductrice',
+];
+const ATELIERS_PORC = ATELIERS.filter((atelier) =>
+    atelier.startsWith('Porcherie'),
+);
+
+/* ══ REGISTRE ANIMAL / LOGES — reprise de la version terrain fournie ══ */
+const ESPECES = {
+    Porcherie: 'Porc',
+    Poulailler: 'Volaille',
+    'Bovins K2': 'Bovin',
+    Pisciculture: 'Poisson',
+};
+const SUIVI_INDIVIDUEL = {
+    Porcherie: true,
+    Poulailler: false,
+    'Bovins K2': true,
+    Pisciculture: false,
+};
+const IDENT_ANIMAL = {
+    Porcherie: 'Boucle (couleur + série)',
+    Poulailler: 'Numéro de lot',
+    'Bovins K2': 'Boucle',
+    Pisciculture: 'Numéro de lot',
+};
+const CATEG_ANIMAL = {
+    Porcherie: [
+        'Truie reproductrice',
+        'Cochette de renouvellement',
+        'Verrat',
+        'Porcelet sous la mère',
+        'Porcelet sevré',
+        'Croissance',
+        'Engraissement',
+        'Finition',
+    ],
+    Poulailler: [
+        'Poussin 0-3 semaines',
+        'Croissance 3-6 semaines',
+        'Finition',
+        'Pondeuse',
+        'Coq reproducteur',
+    ],
+    'Bovins K2': [
+        'Vache',
+        'Génisse',
+        'Taureau',
+        'Taurillon',
+        'Veau',
+        "Bœuf d'engraissement",
+    ],
+    Pisciculture: [
+        'Alevin tilapia',
+        'Tilapia grossissement',
+        'Tilapia finition',
+        'Alevin Clarias',
+        'Clarias grossissement',
+    ],
+};
+const TYPES_LOGE = {
+    Porcherie: [
+        'Maternité',
+        'Gestante',
+        'Verraterie',
+        'Post-sevrage',
+        'Engraissement',
+        'Quarantaine',
+        'Infirmerie',
+    ],
+    Poulailler: ['Poussinière', 'Parcours', 'Pondoir', 'Quarantaine'],
+    'Bovins K2': ['Paddock', 'Étable', 'Box de vêlage', 'Quarantaine'],
+    Pisciculture: [
+        'Bac nurserie',
+        'Bac grossissement',
+        'Bac finition',
+        'Bac reproduction',
+    ],
+};
+const MOT_LOGE = {
+    Porcherie: 'loge',
+    Poulailler: 'compartiment',
+    'Bovins K2': 'paddock',
+    Pisciculture: 'bac',
+};
+const PREFIXE_LOGE = {
+    Porcherie: 'L',
+    Poulailler: 'C',
+    'Bovins K2': 'PAD',
+    Pisciculture: 'BAC',
+};
+const MOTIFS_SORTIE = [
+    'Vente — reproducteur',
+    'Vente — boucherie',
+    'Vente — EZHL',
+    'Abattage pour le site',
+    'MORTALITÉ',
+    'Transfert vers un autre atelier',
+    'Vol ou disparition',
+];
+
 const DETAIL_BATI = {
     'Porcherie A': '246 m² · Large White — ligne verte pure (reproducteurs)',
     'Porcherie B':
@@ -1336,6 +1475,7 @@ function CarteFerme({
     setLieu,
     ACC,
     onOuvrir,
+    resolveLieu = (name) => name,
 }) {
     const [survol, setSurvol] = useState(null);
     const actif = survol || lieu;
@@ -1421,7 +1561,7 @@ function CarteFerme({
                                 style={{ cursor: 'pointer' }}
                                 onMouseEnter={() => setSurvol(f.n)}
                                 onMouseLeave={() => setSurvol(null)}
-                                onClick={() => setLieu(f.n)}
+                                onClick={() => setLieu(resolveLieu(f.n))}
                             />
                         ))}
                     {carte
@@ -1534,7 +1674,7 @@ function CarteFerme({
                                 </div>
                             )}
                         </div>
-                        {lieu === info.nom && (
+                        {resolveLieu(lieu) === resolveLieu(info.nom) && (
                             <button
                                 onClick={onOuvrir}
                                 style={{
@@ -1619,6 +1759,10 @@ export default function App({
     const agentsAni = configured('agents_ani', AGENTS_ANI);
     const parcelles = configured('parcelles', PARCELLES);
     const ateliers = configured('ateliers', ATELIERS);
+    const resolveLieu = (name) =>
+        ateliers.find(
+            (atelier) => atelier === name || atelier.startsWith(`${name} —`),
+        ) || name;
     const cultures = configured('cultures', CULTURES);
     const tachesAgri = configured('taches_agri', TACHES);
     const unites = configured('unites', UNITES);
@@ -1673,6 +1817,11 @@ export default function App({
     const [compteurs, setCompteurs] = useState({});
     const [articles, setArticles] = useState([]);
     const [reqs, setReqs] = useState([]);
+    const [truies, setTruies] = useState([]);
+    const [animaux, setAnimaux] = useState([]);
+    const [loges, setLoges] = useState({});
+    const [logeOuverte, setLogeOuverte] = useState('');
+    const [actAn, setActAn] = useState(null);
     const [cc, setCc] = useState('');
     const [meteo, setMeteo] = useState('');
     const [pluie, setPluie] = useState('');
@@ -1688,6 +1837,7 @@ export default function App({
     const [sante, setSante] = useState([]);
     const [problemes, setProblemes] = useState([]);
     const [formFreq, setFormFreq] = useState([]);
+    const [dialog, setDialog] = useState(null);
 
     const AGENTS = [
         ...(bureau === 'AGRI' ? agentsAgri : agentsAni).filter(
@@ -1710,6 +1860,36 @@ export default function App({
     const flash = (m, ms = 2400) => {
         setEtat(m);
         setTimeout(() => setEtat(''), ms);
+    };
+    const confirmer = (title, message, confirmLabel = 'Confirmer') =>
+        new Promise((resolve) => {
+            setDialog({
+                type: 'confirm',
+                title,
+                message,
+                confirmLabel,
+                cancelLabel: 'Annuler',
+                resolve,
+            });
+        });
+    const demanderTexte = (title, message, placeholder = '') =>
+        new Promise((resolve) => {
+            setDialog({
+                type: 'prompt',
+                title,
+                message,
+                placeholder,
+                value: '',
+                confirmLabel: 'Ajouter',
+                cancelLabel: 'Annuler',
+                resolve,
+            });
+        });
+    const fermerDialog = (value) => {
+        if (!dialog) return;
+        const resolve = dialog.resolve;
+        setDialog(null);
+        resolve(value);
     };
 
     /* ── EPI : validité et remise ── */
@@ -1744,7 +1924,11 @@ export default function App({
     /* Ajout manuel d'un nom absent de la liste */
     const ajouterAgent = async () => {
         const nom = (
-            window.prompt('Nom de la personne à ajouter :') || ''
+            (await demanderTexte(
+                'Ajouter une personne',
+                'Saisissez le nom complet à rendre disponible dans les listes terrain.',
+                'Ex: KAZADI Jules',
+            )) || ''
         ).trim();
         if (!nom) return;
         if (AGENTS.includes(nom)) return flash('Ce nom est déjà dans la liste');
@@ -1831,6 +2015,9 @@ export default function App({
                 ['compteurs', setCompteurs],
                 ['articles', setArticles],
                 ['requisitions', setReqs],
+                ['truies', setTruies],
+                ['animaux', setAnimaux],
+                ['loges', setLoges],
             ]) {
                 try {
                     const v = await window.storage.get(k, true);
@@ -2054,9 +2241,11 @@ export default function App({
         if (!r) return;
         if (
             st === 'Approuvée' &&
-            !window.confirm(
-                `APPROBATION — ${num}\n\nValeur : ${r.valeur} USD\nCentre de coût : ${r.cc}\n\nToute dépense ou sortie de stock exige un accord écrit (Art. 15 du Règlement d'Entreprise).\n\nApprouver ?`,
-            )
+            !(await confirmer(
+                `Approbation — ${num}`,
+                `Valeur : ${r.valeur} USD\nCentre de coût : ${r.cc}\n\nToute dépense ou sortie de stock exige un accord écrit (Art. 15 du Règlement d'Entreprise).\n\nApprouver cette réquisition ?`,
+                'Approuver',
+            ))
         )
             return;
         let arts = [...articles];
@@ -2178,6 +2367,502 @@ export default function App({
         window.location.href = `mailto:${MGMT}?subject=${encodeURIComponent(`Réquisition ${r.num} — ${r.valeur} USD — ${r.cc}`)}&body=${encodeURIComponent(texteReq(r))}`;
     };
 
+    /* ══ BT Animal — registre animal, loges et fiches truies ══ */
+    const [tr, setTr] = useState({
+        serie: '',
+        couleur: 'Verte',
+        cohorte: '',
+        encoche: '',
+        naissance: '',
+        origine: '',
+        mere: '',
+        pere: '',
+        atelier: '',
+    });
+    const [truieOuverte, setTruieOuverte] = useState('');
+    const [cy, setCy] = useState({
+        saillie: '',
+        verrat: '',
+        misBas: '',
+        nesTotal: '',
+        nesVivants: '',
+        mortNes: '',
+        momifies: '',
+        poidsPortee: '',
+        sevrage: '',
+        sevres: '',
+        poidsSevrage: '',
+        notes: '',
+    });
+    const [rf, setRf] = useState('');
+    const [an, setAn] = useState({
+        code: '',
+        categorie: '',
+        sexe: '',
+        nb: '1',
+        naissance: '',
+        origine: '',
+        poids: '',
+        loge: '',
+        notes: '',
+    });
+    const [lg, setLg] = useState({ nb: '', cap: '', type: '', rangs: '2' });
+
+    const typeDe = (atelier) => TYPE_ATELIER(atelier);
+    const jours = (a, b) =>
+        Math.round((new Date(b) - new Date(a)) / 86400000);
+    const plusJours = (d, n) => {
+        const x = new Date(d);
+        x.setDate(x.getDate() + n);
+        return x.toISOString().slice(0, 10);
+    };
+    const nomTruie = (t) => `${t.couleur === 'Verte' ? 'V' : 'J'}-${t.serie}`;
+    const cycleEnCours = (t) =>
+        ((t.cycles || []).filter((c) => !c.sevrage).slice(-1)[0]) || null;
+    const statutTruie = (t) => {
+        if (t.reforme) return { t: 'RÉFORMÉE', c: '#8A8A80' };
+        const c = cycleEnCours(t);
+        if (!c) return { t: 'VIDE', c: C.amber };
+        if (!c.misBas) return { t: 'GESTANTE', c: C.green2 };
+        return { t: 'ALLAITANTE', c: C.laterite };
+    };
+    const sauverTruies = async (liste) => {
+        setTruies(liste);
+        try {
+            await window.storage.set('truies', JSON.stringify(liste), true);
+        } catch {
+            /* non bloquant */
+        }
+    };
+    const sauverAnimaux = async (liste) => {
+        setAnimaux(liste);
+        try {
+            await window.storage.set('animaux', JSON.stringify(liste), true);
+        } catch {
+            /* non bloquant */
+        }
+    };
+    const sauverLoges = async (liste) => {
+        setLoges(liste);
+        try {
+            await window.storage.set('loges', JSON.stringify(liste), true);
+        } catch {
+            /* non bloquant */
+        }
+    };
+
+    const presentsDe = (atelier) =>
+        animaux.filter((a) => a.atelier === atelier && a.statut === 'Présent');
+    const effectifRegistre = (atelier) =>
+        presentsDe(atelier).reduce((s, a) => s + (parseInt(a.nb) || 1), 0);
+    const logesDe = (atelier) => (loges[atelier] || {}).liste || [];
+    const capaciteTotale = (atelier) =>
+        logesDe(atelier).reduce((s, l) => s + (parseInt(l.cap) || 0), 0);
+    const occupationLoge = (atelier, num) =>
+        presentsDe(atelier)
+            .filter((a) => a.loge === num)
+            .reduce((s, a) => s + (parseInt(a.nb) || 1), 0);
+    const placesLibres = (atelier) =>
+        Math.max(0, capaciteTotale(atelier) - effectifRegistre(atelier));
+    const sansLoge = (atelier) =>
+        presentsDe(atelier)
+            .filter((a) => !a.loge)
+            .reduce((s, a) => s + (parseInt(a.nb) || 1), 0);
+    const parCategorie = (atelier) => {
+        const m = {};
+        presentsDe(atelier).forEach((a) => {
+            m[a.categorie] = (m[a.categorie] || 0) + (parseInt(a.nb) || 1);
+        });
+        return m;
+    };
+    const sortiesRecentes = (atelier, motif, n) =>
+        animaux
+            .filter(
+                (a) =>
+                    a.atelier === atelier &&
+                    a.sortie &&
+                    a.sortie.motif === motif &&
+                    jours(a.sortie.date, date) <= n,
+            )
+            .reduce((s, a) => s + (parseInt(a.nb) || 1), 0);
+    const dernierComptage = (atelier) => {
+        const c = cheptel.filter((x) => x.lieu === atelier).slice(-1)[0];
+        return c ? parseFloat(c.effectif) : null;
+    };
+    const truiesSansFiche = (atelier) =>
+        presentsDe(atelier).filter(
+            (a) =>
+                a.categorie === 'Truie reproductrice' &&
+                !truies.some(
+                    (t) =>
+                        nomTruie(t) === a.code ||
+                        String(t.serie) === String(a.code).replace(/^[VJ]-/, ''),
+                ),
+        );
+
+    const genererLoges = async (atelier) => {
+        const n = parseInt(lg.nb) || 0;
+        const ty = typeDe(atelier);
+        if (!n) return flash(`Indiquez combien de ${MOT_LOGE[ty]}s créer`);
+        if (!lg.type) return flash('Indiquez le type');
+        const pre = PREFIXE_LOGE[ty] || 'L';
+        const ex = logesDe(atelier);
+        const liste = [...ex];
+        for (let i = 1; i <= n; i++) {
+            liste.push({
+                n: `${pre}-${String(ex.length + i).padStart(2, '0')}`,
+                type: lg.type,
+                cap: lg.cap || '',
+            });
+        }
+        await sauverLoges({
+            ...loges,
+            [atelier]: { rangs: parseInt(lg.rangs) || 2, liste },
+        });
+        log(`${n} ${MOT_LOGE[ty]}(s) créée(s) — ${atelier}`);
+        setLg({ nb: '', cap: '', type: '', rangs: lg.rangs });
+        flash(`${n} ${MOT_LOGE[ty]}(s) numérotée(s)`);
+    };
+    const retirerLoge = async (atelier, num) => {
+        if (occupationLoge(atelier, num) > 0)
+            return flash(`${num} n'est pas vide — déplacez d'abord les animaux`);
+        if (!(await confirmer('Supprimer la loge', `Supprimer ${num} ?`, 'Supprimer')))
+            return;
+        const cfg = loges[atelier] || {};
+        await sauverLoges({
+            ...loges,
+            [atelier]: { ...cfg, liste: logesDe(atelier).filter((l) => l.n !== num) },
+        });
+        setLogeOuverte('');
+    };
+    const majRangs = async (atelier, rangs) => {
+        const cfg = loges[atelier] || { liste: [] };
+        await sauverLoges({
+            ...loges,
+            [atelier]: { ...cfg, rangs: parseInt(rangs) || 1 },
+        });
+    };
+    const creerAnimal = async () => {
+        if (!lieu) return flash("Choisissez d'abord l'atelier");
+        const ty = typeDe(lieu);
+        const nb = SUIVI_INDIVIDUEL[ty] ? 1 : parseInt(an.nb) || 0;
+        if (!an.categorie || !nb)
+            return flash('Catégorie et effectif obligatoires');
+        if (SUIVI_INDIVIDUEL[ty] && !an.code)
+            return flash(`${IDENT_ANIMAL[ty]} obligatoire`);
+        if (an.loge) {
+            const l = logesDe(lieu).find((x) => x.n === an.loge);
+            const occ = occupationLoge(lieu, an.loge);
+            if (
+                l &&
+                l.cap &&
+                occ + nb > parseInt(l.cap) &&
+                !(await confirmer(
+                    'Capacité dépassée',
+                    `${an.loge} : ${occ} présent(s) pour ${l.cap} place(s).\n\nAjouter ${nb} dépasse la capacité. Confirmer ?`,
+                    'Confirmer',
+                ))
+            )
+                return;
+        }
+        const rec = {
+            id: `${Date.now()}`,
+            ...an,
+            nb,
+            atelier: lieu,
+            espece: ESPECES[ty],
+            statut: 'Présent',
+            entree: date,
+            par: redacteur || '—',
+        };
+        await sauverAnimaux([rec, ...animaux]);
+        log(`Entrée registre ${lieu} — ${rec.code || rec.categorie} × ${nb}`);
+        setAn({
+            code: '',
+            categorie: '',
+            sexe: '',
+            nb: '1',
+            naissance: '',
+            origine: '',
+            poids: '',
+            loge: an.loge,
+            notes: '',
+        });
+        flash(`Enregistré${an.loge ? ` en ${an.loge}` : ' — aucune loge attribuée'}`);
+    };
+    const deplacerAnimal = async (animal, vers) => {
+        if (!vers) return;
+        const l = logesDe(animal.atelier).find((x) => x.n === vers);
+        const occ = occupationLoge(animal.atelier, vers);
+        if (
+            l &&
+            l.cap &&
+            occ + (parseInt(animal.nb) || 1) > parseInt(l.cap) &&
+            !(await confirmer(
+                'Capacité dépassée',
+                `${vers} va dépasser sa capacité. Continuer ?`,
+                'Déplacer',
+            ))
+        )
+            return;
+        await sauverAnimaux(
+            animaux.map((x) =>
+                x.id === animal.id
+                    ? {
+                          ...x,
+                          loge: vers,
+                          mouvements: [
+                              ...(x.mouvements || []),
+                              { d: date, de: x.loge || '—', vers, par: redacteur || '—' },
+                          ],
+                      }
+                    : x,
+            ),
+        );
+        log(`Déplacement ${animal.code || animal.categorie} vers ${vers}`);
+    };
+    const sortirAnimal = async (animal, motif) => {
+        if (!motif) return;
+        const valeur =
+            (await demanderTexte(
+                'Sortie du registre',
+                `Motif : ${motif}\n\nValeur éventuelle en USD (laisser vide si non applicable).`,
+                'Ex: 150',
+            )) || '';
+        if (
+            !(await confirmer(
+                'Confirmer la sortie',
+                `${animal.code || animal.categorie} × ${animal.nb}\nMotif : ${motif}\n\nLa fiche est conservée, mais l’animal ne compte plus à l’effectif.`,
+                'Sortir',
+            ))
+        )
+            return;
+        await sauverAnimaux(
+            animaux.map((x) =>
+                x.id === animal.id
+                    ? {
+                          ...x,
+                          statut: 'Sorti',
+                          sortie: { date, motif, valeur, par: redacteur || '—' },
+                      }
+                    : x,
+            ),
+        );
+        log(`Sortie registre ${animal.code || animal.categorie} — ${motif}`);
+        setActAn(null);
+    };
+
+    const creerTruie = async () => {
+        if (!tr.serie) return flash('Le numéro de série de la boucle est obligatoire');
+        if (
+            truies.some(
+                (t) =>
+                    String(t.serie) === String(tr.serie) && t.couleur === tr.couleur,
+            )
+        )
+            return flash(
+                `REFUSÉ — ${tr.couleur === 'Verte' ? 'V' : 'J'}-${tr.serie} existe déjà. Le numéro n'est jamais réattribué.`,
+                6500,
+            );
+        if (tr.couleur === 'Verte' && !tr.cohorte)
+            return flash('Ligne pure : la boucle de cohorte est obligatoire');
+        const rec = {
+            id: `${Date.now()}`,
+            ...tr,
+            ligne: tr.couleur === 'Verte' ? 'Pure' : 'Terminale',
+            verratInterdit: (COHORTES.find((x) => x.c === tr.cohorte) || {}).pere || '',
+            cree: date,
+            creePar: redacteur || '—',
+            cycles: [],
+            reforme: null,
+        };
+        await sauverTruies([rec, ...truies]);
+        log(`Truie ${nomTruie(rec)} enregistrée`);
+        setTr({
+            serie: '',
+            couleur: 'Verte',
+            cohorte: '',
+            encoche: '',
+            naissance: '',
+            origine: '',
+            mere: '',
+            pere: '',
+            atelier: '',
+        });
+        flash(`${nomTruie(rec)} enregistrée`);
+    };
+    const enregistrerSaillie = async (t) => {
+        if (!cy.saillie || !cy.verrat)
+            return flash('Date de saillie et verrat obligatoires');
+        if (cycleEnCours(t))
+            return flash('Un cycle est déjà ouvert — enregistrez la mise bas puis le sevrage');
+        if (t.verratInterdit && cy.verrat === t.verratInterdit)
+            return flash(
+                `SAILLIE INTERDITE — ${nomTruie(t)} porte la cohorte ${t.cohorte}. Choisissez un autre verrat.`,
+                7000,
+            );
+        const c = {
+            n: (t.cycles || []).length + 1,
+            saillie: cy.saillie,
+            verrat: cy.verrat,
+            misBasPrevue: plusJours(cy.saillie, GESTATION),
+            notes: cy.notes || '',
+        };
+        await sauverTruies(
+            truies.map((x) =>
+                x.id === t.id ? { ...x, cycles: [...(x.cycles || []), c] } : x,
+            ),
+        );
+        setCy({ ...cy, saillie: '', verrat: '', notes: '' });
+        log(`Saillie ${nomTruie(t)} × ${cy.verrat}`);
+        flash(`Saillie enregistrée — mise bas prévue le ${c.misBasPrevue}`, 4200);
+    };
+    const enregistrerMiseBas = async (t) => {
+        const c = cycleEnCours(t);
+        if (!c) return flash('Aucune saillie ouverte pour cette truie');
+        if (!cy.misBas || !cy.nesVivants)
+            return flash('Date de mise bas et nés vivants obligatoires');
+        const maj = {
+            ...c,
+            misBas: cy.misBas,
+            nesTotal: cy.nesTotal,
+            nesVivants: cy.nesVivants,
+            mortNes: cy.mortNes,
+            momifies: cy.momifies,
+            poidsPortee: cy.poidsPortee,
+            sevragePrevu: plusJours(cy.misBas, SEVRAGE_CIBLE),
+            ecartGestation: jours(c.saillie, cy.misBas) - GESTATION,
+        };
+        await sauverTruies(
+            truies.map((x) =>
+                x.id === t.id
+                    ? { ...x, cycles: (x.cycles || []).map((z) => (z.n === c.n ? maj : z)) }
+                    : x,
+            ),
+        );
+        setCy({ ...cy, misBas: '', nesTotal: '', nesVivants: '', mortNes: '', momifies: '', poidsPortee: '' });
+        log(`Mise bas ${nomTruie(t)} — ${cy.nesVivants} nés vivants`);
+        flash(`Mise bas enregistrée — sevrage prévu le ${maj.sevragePrevu}`, 4500);
+    };
+    const enregistrerSevrage = async (t) => {
+        const c = cycleEnCours(t);
+        if (!c || !c.misBas) return flash("Enregistrez d'abord la mise bas");
+        if (!cy.sevrage || !cy.sevres)
+            return flash('Date de sevrage et nombre de sevrés obligatoires');
+        const age = jours(c.misBas, cy.sevrage);
+        if (
+            age < SEVRAGE_MIN &&
+            !(await confirmer(
+                'Sevrage précoce',
+                `${age} jours. Le protocole cible 28 jours, minimum absolu 21. Confirmer ?`,
+                'Confirmer',
+            ))
+        )
+            return;
+        if (
+            age > SEVRAGE_MAX &&
+            !(await confirmer(
+                'Sevrage tardif',
+                `${age} jours. Le protocole recommande maximum 35 jours. Confirmer ?`,
+                'Confirmer',
+            ))
+        )
+            return;
+        const pm = parseFloat(cy.poidsSevrage);
+        if (
+            pm &&
+            pm < POIDS_SEVRAGE_MIN &&
+            !(await confirmer(
+                'Poids insuffisant',
+                `${pm} kg de moyenne. Le seuil est de 6 à 7 kg au sevrage. Confirmer ?`,
+                'Confirmer',
+            ))
+        )
+            return;
+        const maj = {
+            ...c,
+            sevrage: cy.sevrage,
+            sevres: cy.sevres,
+            poidsSevrage: cy.poidsSevrage,
+            ageSevrage: age,
+        };
+        await sauverTruies(
+            truies.map((x) =>
+                x.id === t.id
+                    ? { ...x, cycles: (x.cycles || []).map((z) => (z.n === c.n ? maj : z)) }
+                    : x,
+            ),
+        );
+        setCy({ ...cy, sevrage: '', sevres: '', poidsSevrage: '' });
+        log(`Sevrage ${nomTruie(t)} — ${cy.sevres} sevrés à ${age} j`);
+        flash(`Sevrage enregistré — ${age} jours`);
+    };
+    const reformer = async (t) => {
+        if (!rf) return flash('Le motif de réforme est obligatoire');
+        if (
+            !(await confirmer(
+                'Réformer la truie',
+                `${nomTruie(t)}\nMotif : ${rf}\n\nLa fiche est conservée et le numéro reste bloqué.`,
+                'Réformer',
+            ))
+        )
+            return;
+        await sauverTruies(
+            truies.map((x) =>
+                x.id === t.id ? { ...x, reforme: { date, motif: rf, par: redacteur || '—' } } : x,
+            ),
+        );
+        setRf('');
+        log(`Réforme ${nomTruie(t)} — ${rf}`);
+        flash('Truie réformée — fiche conservée');
+    };
+    const bilanTruie = (t) => {
+        const cs = (t.cycles || []).filter((c) => c.misBas);
+        const cw = cs.filter((c) => c.sevrage);
+        const nv = cs.reduce((a, c) => a + (parseFloat(c.nesVivants) || 0), 0);
+        const nvw = cw.reduce((a, c) => a + (parseFloat(c.nesVivants) || 0), 0);
+        const sv = cw.reduce((a, c) => a + (parseFloat(c.sevres) || 0), 0);
+        return {
+            portees: cs.length,
+            moyNes: cs.length ? (nv / cs.length).toFixed(1) : '—',
+            moySevres: cw.length ? (sv / cw.length).toFixed(1) : '—',
+            mortalite: nvw ? (((nvw - sv) / nvw) * 100).toFixed(0) : '—',
+        };
+    };
+    const alertesTruies = () => {
+        const out = [];
+        truies
+            .filter((t) => !t.reforme)
+            .forEach((t) => {
+                const c = cycleEnCours(t);
+                if (c && !c.misBas) {
+                    const j = jours(date, c.misBasPrevue);
+                    if (j <= 7)
+                        out.push({
+                            t,
+                            txt:
+                                j >= 0
+                                    ? `mise bas prévue dans ${j} j — le ${c.misBasPrevue}`
+                                    : `mise bas EN RETARD de ${-j} j`,
+                            urg: j < 0,
+                        });
+                }
+                if (c && c.misBas && !c.sevrage) {
+                    const j = jours(date, c.sevragePrevu);
+                    if (j <= 3)
+                        out.push({
+                            t,
+                            txt:
+                                j >= 0
+                                    ? `sevrage prévu dans ${j} j`
+                                    : `sevrage EN RETARD de ${-j} j`,
+                            urg: j < -4,
+                        });
+                }
+            });
+        return out;
+    };
+
     /* ── Bons de travail ── */
     const [bt, setBt] = useState({
         metier: '',
@@ -2234,9 +2919,11 @@ export default function App({
     const changerStatut = async (num, st) => {
         if (
             st === 'Approuvé' &&
-            !window.confirm(
-                "APPROBATION\n\nToute dépense exige un accord écrit (Art. 15 du Règlement d'Entreprise).\n\nApprouver ce bon de travail ?",
-            )
+            !(await confirmer(
+                'Approbation du bon de travail',
+                "Toute dépense exige un accord écrit (Art. 15 du Règlement d'Entreprise).\n\nApprouver ce bon de travail ?",
+                'Approuver',
+            ))
         )
             return;
         const l = bts.map((b) =>
@@ -2325,9 +3012,11 @@ export default function App({
         const w = avertRotation(lieu, nc.culture);
         if (
             w &&
-            !window.confirm(
-                `ROTATION : ${w}.\n\nLe plan V32 demande d'attendre. Assigner quand même ?`,
-            )
+            !(await confirmer(
+                'Alerte rotation',
+                `Rotation : ${w}.\n\nLe plan V32 demande d'attendre. Assigner quand même ?`,
+                'Assigner quand même',
+            ))
         )
             return;
         const a = { ...assign, [lieu]: { culture: nc.culture, j0: nc.j0 } };
@@ -2470,9 +3159,11 @@ export default function App({
             const w = verifDose(p, pr.doses[p]);
             if (
                 w &&
-                !window.confirm(
-                    `DOSE ${w.n} — ${p}\n\n${w.m}\n\nConfirmer cette dose ?`,
-                )
+                !(await confirmer(
+                    `Dose ${w.n} — ${p}`,
+                    `${w.m}\n\nConfirmer cette dose ?`,
+                    'Confirmer la dose',
+                ))
             )
                 return;
         }
@@ -2481,9 +3172,11 @@ export default function App({
         const rep = gNew.filter((g) => gOld.includes(g));
         if (
             rep.length &&
-            !window.confirm(
-                `RÉSISTANCE — le groupe ${rep.join(', ')} a déjà été appliqué aujourd'hui.\n\nAlterner les groupes protège l'efficacité. Continuer ?`,
-            )
+            !(await confirmer(
+                'Alerte résistance',
+                `Le groupe ${rep.join(', ')} a déjà été appliqué aujourd'hui.\n\nAlterner les groupes protège l'efficacité. Continuer ?`,
+                'Continuer',
+            ))
         )
             return;
         const darMax = Math.max(
@@ -2620,6 +3313,44 @@ export default function App({
                 (s) =>
                     `${s.lieu} — ${s.soin}${s.produit ? ' — ' + s.produit : ''} — ${s.nb} animaux`,
             );
+            const ateliersAvecRegistre = ateliers.filter(
+                (atelier) =>
+                    effectifRegistre(atelier) > 0 || logesDe(atelier).length > 0,
+            );
+            if (ateliersAvecRegistre.length)
+                bloc(
+                    'REGISTRE ANIMAL / OCCUPATION',
+                    ateliersAvecRegistre,
+                    (atelier) =>
+                        `${atelier} — ${effectifRegistre(atelier)} au registre · ${logesDe(atelier).length} ${MOT_LOGE[typeDe(atelier)]}(s) · ${placesLibres(atelier)} place(s) libre(s)`,
+                );
+            const sorties = animaux.filter(
+                (a) => a.sortie && a.sortie.date === date,
+            );
+            if (sorties.length)
+                bloc(
+                    'SORTIES DU REGISTRE',
+                    sorties,
+                    (a) =>
+                        `${a.atelier} — ${a.code || a.categorie} × ${a.nb} — ${a.sortie.motif}${a.sortie.valeur ? ` — ${a.sortie.valeur} USD` : ''}`,
+                );
+            const cyclesJour = truies.flatMap((t) =>
+                (t.cycles || [])
+                    .filter(
+                        (c) =>
+                            c.saillie === date ||
+                            c.misBas === date ||
+                            c.sevrage === date,
+                    )
+                    .map((c) => ({ truie: t, cycle: c })),
+            );
+            if (cyclesJour.length)
+                bloc(
+                    'REPRODUCTION PORCINE',
+                    cyclesJour,
+                    ({ truie, cycle }) =>
+                        `${nomTruie(truie)} — cycle ${cycle.n} — ${cycle.sevrage ? `sevrage ${cycle.sevrage} (${cycle.ageSevrage} j)` : cycle.misBas ? `mise bas ${cycle.misBas} · ${cycle.nesVivants} nés vivants` : `saillie ${cycle.saillie} par ${cycle.verrat}`}`,
+                );
         }
         if (formFreq.length)
             bloc(
@@ -2792,6 +3523,53 @@ export default function App({
                 s.produit || '',
             ]),
         );
+        animaux.forEach((a) =>
+            R.push([
+                a.entree || date,
+                'ANI',
+                'animal',
+                a.atelier,
+                a.espece || '',
+                `${a.code || ''} ${a.categorie || ''}`.trim(),
+                a.nb,
+                'tête(s)',
+                `${a.loge || 'sans loge'} · ${a.statut}${a.sortie ? ` · ${a.sortie.motif} ${a.sortie.date}` : ''}`,
+            ]),
+        );
+        ateliers.forEach((atelier) =>
+            logesDe(atelier).forEach((l) =>
+                R.push([
+                    date,
+                    'ANI',
+                    'loge',
+                    atelier,
+                    '',
+                    `${l.n} ${l.type}`,
+                    occupationLoge(atelier, l.n),
+                    'occupée(s)',
+                    `capacité ${l.cap || 'non définie'}`,
+                ]),
+            ),
+        );
+        truies.forEach((t) =>
+            (t.cycles || []).forEach((c) =>
+                R.push([
+                    c.sevrage || c.misBas || c.saillie || date,
+                    'ANI',
+                    'truie',
+                    t.atelier || '',
+                    nomTruie(t),
+                    `cycle ${c.n} — ${c.verrat}`,
+                    c.sevres || c.nesVivants || '',
+                    'porcelets',
+                    c.sevrage
+                        ? `sevré à ${c.ageSevrage} j`
+                        : c.misBas
+                          ? `mise bas ${c.misBas}`
+                          : `saillie ${c.saillie}`,
+                ]),
+            ),
+        );
         problemes.forEach((p) =>
             R.push([
                 date,
@@ -2903,6 +3681,9 @@ export default function App({
                   ['soucis', 'Problèmes'],
               ]
             : [
+                  ['atelier', 'Atelier'],
+                  ['animaux', 'Animaux'],
+                  ['truies', 'Truies'],
                   ['cheptel', 'Cheptel'],
                   ['alim', 'Aliment'],
                   ['sante', 'Santé'],
@@ -2972,6 +3753,59 @@ export default function App({
         const a = assign[lieu];
         const dues = tachesDues(lieu);
         const d = dars[lieu];
+        if (bureau === 'ANI') {
+            const ty = typeDe(lieu);
+            return (
+                <div
+                    style={{
+                        background: ACC,
+                        color: '#fff',
+                        padding: 16,
+                        borderRadius: 4,
+                        marginBottom: 14,
+                    }}
+                >
+                    <div
+                        style={{
+                            fontFamily: 'Oswald, sans-serif',
+                            fontSize: 21,
+                            fontWeight: 700,
+                        }}
+                    >
+                        {lieu || 'Aucun atelier choisi'}
+                    </div>
+                    {lieu && (
+                        <div
+                            style={{
+                                fontSize: 15,
+                                marginTop: 5,
+                                lineHeight: 1.5,
+                            }}
+                        >
+                            {ESPECES[ty]} ·{' '}
+                            <b style={{ fontSize: 20 }}>
+                                {effectifRegistre(lieu)}
+                            </b>{' '}
+                            au registre · {placesLibres(lieu)} place(s)
+                            libre(s)
+                            {DETAIL_BATI[lieu.replace(' — K1', '')] && (
+                                <>
+                                    <br />
+                                    <span
+                                        style={{
+                                            opacity: 0.9,
+                                            fontSize: 13.5,
+                                        }}
+                                    >
+                                        {DETAIL_BATI[lieu.replace(' — K1', '')]}
+                                    </span>
+                                </>
+                            )}
+                        </div>
+                    )}
+                </div>
+            );
+        }
         return (
             <>
                 <div
@@ -3423,6 +4257,45 @@ export default function App({
                                 </div>
                             </div>
                         )}
+                        {bureau === 'ANI' && alertesTruies().length > 0 && (
+                            <div
+                                style={{
+                                    background: alertesTruies().some(
+                                        (a) => a.urg,
+                                    )
+                                        ? C.red
+                                        : C.amber,
+                                    color: '#fff',
+                                    padding: 14,
+                                    borderRadius: 4,
+                                    marginBottom: 14,
+                                }}
+                            >
+                                <div
+                                    style={{
+                                        fontFamily: 'Oswald, sans-serif',
+                                        fontSize: 16,
+                                        fontWeight: 700,
+                                    }}
+                                >
+                                    MATERNITÉ — {alertesTruies().length}{' '}
+                                    ÉCHÉANCE(S)
+                                </div>
+                                {alertesTruies()
+                                    .slice(0, 5)
+                                    .map((a, i) => (
+                                        <div
+                                            key={i}
+                                            style={{
+                                                fontSize: 14,
+                                                marginTop: 4,
+                                            }}
+                                        >
+                                            · {nomTruie(a.t)} — {a.txt}
+                                        </div>
+                                    ))}
+                            </div>
+                        )}
                         <>
                             <Label>
                                 Plan de la ferme — K1, 19,57 ha mesurés
@@ -3435,7 +4308,14 @@ export default function App({
                                 lieu={lieu}
                                 setLieu={setLieu}
                                 ACC={ACC}
-                                onOuvrir={() => setVue('parcelle')}
+                                onOuvrir={() =>
+                                    setVue(
+                                        bureau === 'AGRI'
+                                            ? 'parcelle'
+                                            : 'atelier',
+                                    )
+                                }
+                                resolveLieu={resolveLieu}
                             />
                         </>
                         <Label>
@@ -3450,7 +4330,12 @@ export default function App({
                                     key={l}
                                     onClick={() => {
                                         setLieu(l);
-                                        setVue('parcelle');
+                                        setLogeOuverte('');
+                                        setVue(
+                                            bureau === 'AGRI'
+                                                ? 'parcelle'
+                                                : 'atelier',
+                                        );
                                     }}
                                     style={{
                                         width: '100%',
@@ -3495,10 +4380,12 @@ export default function App({
                                             >
                                                 {a
                                                     ? `${a.culture} · J+${jPlus(l)}`
-                                                    : 'libre'}
+                                                    : bureau === 'ANI'
+                                                      ? `${effectifRegistre(l)} animal(aux) · ${logesDe(l).length} ${MOT_LOGE[typeDe(l)]}(s) · ${placesLibres(l)} place(s) libre(s)`
+                                                      : 'libre'}
                                             </div>
                                         </div>
-                                        {n > 0 && (
+                                        {bureau === 'AGRI' && n > 0 && (
                                             <div
                                                 style={{
                                                     background: C.laterite,
@@ -3512,6 +4399,22 @@ export default function App({
                                                 {n} tâche(s)
                                             </div>
                                         )}
+                                        {bureau === 'ANI' &&
+                                            truiesSansFiche(l).length > 0 && (
+                                                <div
+                                                    style={{
+                                                        background: C.amber,
+                                                        color: '#fff',
+                                                        fontSize: 12,
+                                                        fontWeight: 700,
+                                                        padding: '5px 10px',
+                                                        borderRadius: 3,
+                                                    }}
+                                                >
+                                                    {truiesSansFiche(l).length}{' '}
+                                                    fiche(s) truie
+                                                </div>
+                                            )}
                                     </div>
                                 </button>
                             );
@@ -3543,17 +4446,27 @@ export default function App({
                             </Btn>
                         </div>
                         <div style={{ display: 'flex', gap: 10 }}>
+                            {bureau === 'ANI' && (
+                                <Btn
+                                    tone="ghost"
+                                    onClick={() => setVue('truies')}
+                                >
+                                    Truies
+                                </Btn>
+                            )}
                             <Btn tone="ghost" onClick={() => setVue('req')}>
                                 Réquisitions
                             </Btn>
+                        </div>
+                        <div style={{ display: 'flex', gap: 10 }}>
                             <Btn tone="ghost" onClick={() => setVue('rapport')}>
                                 Rapport
                             </Btn>
-                        </div>
-                        <div style={{ display: 'flex', gap: 10 }}>
                             <Btn tone="ghost" onClick={() => setVue('histo')}>
                                 Historique
                             </Btn>
+                        </div>
+                        <div style={{ display: 'flex', gap: 10 }}>
                             <Btn tone="ghost" onClick={() => setVue('journal')}>
                                 Journal
                             </Btn>
@@ -3575,6 +4488,7 @@ export default function App({
                                     setLieu={setLieu}
                                     ACC={ACC}
                                     onOuvrir={() => {}}
+                                    resolveLieu={resolveLieu}
                                 />
                             )}
                         {!assign[lieu] ? (
@@ -4289,6 +5203,1188 @@ export default function App({
                                 </button>
                             </Card>
                         ))}
+                        <NavBas />
+                    </>
+                )}
+
+                {vue === 'atelier' && bureau === 'ANI' && (
+                    <>
+                        {lieu ? (
+                            <EnTete />
+                        ) : (
+                            <Sel
+                                value={lieu}
+                                onChange={setLieu}
+                                options={LIEUX}
+                                placeholder="Choisir l'atelier"
+                            />
+                        )}
+                        {lieu && (
+                            <>
+                                {truiesSansFiche(lieu).length > 0 && (
+                                    <div
+                                        style={{
+                                            background: C.amber,
+                                            color: '#fff',
+                                            padding: 14,
+                                            borderRadius: 4,
+                                            marginBottom: 14,
+                                        }}
+                                    >
+                                        <div
+                                            style={{
+                                                fontFamily:
+                                                    'Oswald, sans-serif',
+                                                fontSize: 16,
+                                                fontWeight: 700,
+                                            }}
+                                        >
+                                            {truiesSansFiche(lieu).length}{' '}
+                                            TRUIE(S) SANS FICHE DE REPRODUCTION
+                                        </div>
+                                        <div
+                                            style={{
+                                                fontSize: 14,
+                                                marginTop: 4,
+                                            }}
+                                        >
+                                            {truiesSansFiche(lieu)
+                                                .map((a) => a.code)
+                                                .join(' · ')}{' '}
+                                            — ouvrez le module Truies.
+                                        </div>
+                                    </div>
+                                )}
+                                {dernierComptage(lieu) !== null &&
+                                    dernierComptage(lieu) !==
+                                        effectifRegistre(lieu) && (
+                                        <div
+                                            style={{
+                                                background: C.red,
+                                                color: '#fff',
+                                                padding: 14,
+                                                borderRadius: 4,
+                                                marginBottom: 14,
+                                            }}
+                                        >
+                                            <div
+                                                style={{
+                                                    fontFamily:
+                                                        'Oswald, sans-serif',
+                                                    fontSize: 16,
+                                                    fontWeight: 700,
+                                                }}
+                                            >
+                                                REGISTRE ET COMPTAGE DIVERGENT
+                                            </div>
+                                            <div
+                                                style={{
+                                                    fontSize: 14,
+                                                    marginTop: 4,
+                                                }}
+                                            >
+                                                Comptage du jour :{' '}
+                                                <b>{dernierComptage(lieu)}</b>{' '}
+                                                · registre :{' '}
+                                                <b>
+                                                    {effectifRegistre(lieu)}
+                                                </b>
+                                                .
+                                            </div>
+                                        </div>
+                                    )}
+                                {sansLoge(lieu) > 0 && (
+                                    <div
+                                        style={{
+                                            background: C.amber,
+                                            color: '#fff',
+                                            padding: 12,
+                                            borderRadius: 4,
+                                            marginBottom: 14,
+                                            fontSize: 14.5,
+                                            fontWeight: 600,
+                                        }}
+                                    >
+                                        {sansLoge(lieu)} animal(aux) sans{' '}
+                                        {MOT_LOGE[typeDe(lieu)]} attribué(e).
+                                    </div>
+                                )}
+                                <div
+                                    className="farm-grid-2"
+                                    style={{
+                                        display: 'grid',
+                                        gridTemplateColumns:
+                                            'repeat(2, minmax(0, 1fr))',
+                                        gap: 8,
+                                        marginBottom: 14,
+                                    }}
+                                >
+                                    {[
+                                        ['Au registre', effectifRegistre(lieu)],
+                                        [
+                                            `${MOT_LOGE[typeDe(lieu)]}s`,
+                                            logesDe(lieu).length,
+                                        ],
+                                        [
+                                            'Capacité',
+                                            capaciteTotale(lieu) || '—',
+                                        ],
+                                        ['Places libres', placesLibres(lieu)],
+                                    ].map(([k, v]) => (
+                                        <div
+                                            key={k}
+                                            style={{
+                                                background: '#fff',
+                                                border: `1px solid ${C.line}`,
+                                                borderRadius: 4,
+                                                padding: 12,
+                                                textAlign: 'center',
+                                            }}
+                                        >
+                                            <div
+                                                style={{
+                                                    fontFamily:
+                                                        'Oswald, sans-serif',
+                                                    fontSize: 25,
+                                                    fontWeight: 700,
+                                                    color: C.ink,
+                                                }}
+                                            >
+                                                {v}
+                                            </div>
+                                            <div
+                                                style={{
+                                                    fontSize: 12,
+                                                    color: '#666',
+                                                }}
+                                            >
+                                                {k}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <Label>
+                                    Plan du bâtiment —{' '}
+                                    {MOT_LOGE[typeDe(lieu)]}s
+                                </Label>
+                                {!logesDe(lieu).length && (
+                                    <div
+                                        style={{
+                                            background: '#fff',
+                                            border: `1px dashed ${C.line}`,
+                                            borderRadius: 4,
+                                            padding: 16,
+                                            marginBottom: 14,
+                                            fontSize: 14.5,
+                                            color: '#666',
+                                            lineHeight: 1.5,
+                                        }}
+                                    >
+                                        Aucune {MOT_LOGE[typeDe(lieu)]} définie.
+                                        Créez-les plus bas pour suivre
+                                        l’occupation et les déplacements.
+                                    </div>
+                                )}
+                                <div
+                                    style={{
+                                        display: 'grid',
+                                        gridTemplateColumns:
+                                            'repeat(auto-fit, minmax(96px, 1fr))',
+                                        gap: 8,
+                                        marginBottom: 14,
+                                    }}
+                                >
+                                    {logesDe(lieu).map((l) => {
+                                        const occ = occupationLoge(lieu, l.n);
+                                        const cap = parseInt(l.cap) || 0;
+                                        const couleur =
+                                            occ === 0
+                                                ? '#DCD6C6'
+                                                : cap && occ > cap
+                                                  ? C.red
+                                                  : cap && occ === cap
+                                                    ? C.laterite
+                                                    : C.green2;
+                                        return (
+                                            <button
+                                                key={l.n}
+                                                onClick={() =>
+                                                    setLogeOuverte(
+                                                        logeOuverte === l.n
+                                                            ? ''
+                                                            : l.n,
+                                                    )
+                                                }
+                                                style={{
+                                                    border:
+                                                        logeOuverte === l.n
+                                                            ? `3px solid ${C.ink}`
+                                                            : `1px solid ${C.line}`,
+                                                    background: '#fff',
+                                                    borderRadius: 8,
+                                                    padding: 10,
+                                                    cursor: 'pointer',
+                                                    textAlign: 'left',
+                                                }}
+                                            >
+                                                <div
+                                                    style={{
+                                                        fontFamily:
+                                                            'Oswald, sans-serif',
+                                                        fontSize: 17,
+                                                        fontWeight: 700,
+                                                    }}
+                                                >
+                                                    {l.n}
+                                                </div>
+                                                <div
+                                                    style={{
+                                                        fontSize: 12.5,
+                                                        color: '#666',
+                                                    }}
+                                                >
+                                                    {l.type}
+                                                </div>
+                                                <div
+                                                    style={{
+                                                        marginTop: 6,
+                                                        color: '#fff',
+                                                        background: couleur,
+                                                        borderRadius: 999,
+                                                        padding: '3px 8px',
+                                                        display: 'inline-block',
+                                                        fontSize: 12,
+                                                        fontWeight: 700,
+                                                    }}
+                                                >
+                                                    {occ}
+                                                    {cap ? `/${cap}` : ''}
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                                {logeOuverte && (
+                                    <Card tone={C.laterite}>
+                                        <div
+                                            style={{
+                                                fontFamily:
+                                                    'Oswald, sans-serif',
+                                                fontSize: 19,
+                                                fontWeight: 700,
+                                            }}
+                                        >
+                                            {logeOuverte}
+                                        </div>
+                                        {presentsDe(lieu).filter(
+                                            (a) => a.loge === logeOuverte,
+                                        ).length ? (
+                                            presentsDe(lieu)
+                                                .filter(
+                                                    (a) =>
+                                                        a.loge === logeOuverte,
+                                                )
+                                                .map((a) => (
+                                                    <div
+                                                        key={a.id}
+                                                        style={{
+                                                            fontSize: 14.5,
+                                                            marginTop: 5,
+                                                        }}
+                                                    >
+                                                        · {a.code || a.categorie}{' '}
+                                                        × {a.nb}
+                                                    </div>
+                                                ))
+                                        ) : (
+                                            <div
+                                                style={{
+                                                    fontSize: 14.5,
+                                                    color: '#666',
+                                                    marginTop: 5,
+                                                }}
+                                            >
+                                                Vide. Attribuez un animal en le
+                                                créant ou en le déplaçant ici.
+                                            </div>
+                                        )}
+                                        <div
+                                            style={{
+                                                display: 'flex',
+                                                gap: 8,
+                                                marginTop: 10,
+                                            }}
+                                        >
+                                            <button
+                                                onClick={() => {
+                                                    setAn({
+                                                        ...an,
+                                                        loge: logeOuverte,
+                                                    });
+                                                    setVue('animaux');
+                                                }}
+                                                style={{
+                                                    flex: 1,
+                                                    padding: 10,
+                                                    border: 'none',
+                                                    borderRadius: 4,
+                                                    background: C.green2,
+                                                    color: '#fff',
+                                                    fontWeight: 700,
+                                                    cursor: 'pointer',
+                                                }}
+                                            >
+                                                Ajouter ici
+                                            </button>
+                                            <button
+                                                onClick={() =>
+                                                    retirerLoge(
+                                                        lieu,
+                                                        logeOuverte,
+                                                    )
+                                                }
+                                                style={{
+                                                    flex: 1,
+                                                    padding: 10,
+                                                    border: `1px solid ${C.line}`,
+                                                    borderRadius: 4,
+                                                    background: '#fff',
+                                                    color: C.red,
+                                                    fontWeight: 700,
+                                                    cursor: 'pointer',
+                                                }}
+                                            >
+                                                Supprimer
+                                            </button>
+                                        </div>
+                                    </Card>
+                                )}
+                                <Label>Créer des emplacements</Label>
+                                <Sel
+                                    value={lg.type}
+                                    onChange={(v) => setLg({ ...lg, type: v })}
+                                    options={TYPES_LOGE[typeDe(lieu)] || []}
+                                    placeholder="Type d'emplacement"
+                                />
+                                <Label>Nombre à créer</Label>
+                                <Compteur
+                                    value={lg.nb}
+                                    onChange={(v) => setLg({ ...lg, nb: v })}
+                                />
+                                <Label>Capacité par emplacement</Label>
+                                <Compteur
+                                    value={lg.cap}
+                                    onChange={(v) => setLg({ ...lg, cap: v })}
+                                />
+                                <Btn onClick={() => genererLoges(lieu)}>
+                                    Générer les emplacements
+                                </Btn>
+                                <Btn tone="ghost" onClick={() => setVue('animaux')}>
+                                    Registre animal
+                                </Btn>
+                            </>
+                        )}
+                        <NavBas />
+                    </>
+                )}
+
+                {vue === 'animaux' && bureau === 'ANI' && (
+                    <>
+                        {lieu ? (
+                            <EnTete />
+                        ) : (
+                            <Sel
+                                value={lieu}
+                                onChange={setLieu}
+                                options={LIEUX}
+                                placeholder="Choisir l'atelier"
+                            />
+                        )}
+                        {lieu && (
+                            <>
+                                <Label>Nouvelle entrée au registre</Label>
+                                <Sel
+                                    value={an.categorie}
+                                    onChange={(v) =>
+                                        setAn({ ...an, categorie: v })
+                                    }
+                                    options={CATEG_ANIMAL[typeDe(lieu)] || []}
+                                    placeholder="Catégorie"
+                                />
+                                <Txt
+                                    value={an.code}
+                                    onChange={(v) => setAn({ ...an, code: v })}
+                                    placeholder={
+                                        IDENT_ANIMAL[typeDe(lieu)] ||
+                                        'Identifiant'
+                                    }
+                                />
+                                {!SUIVI_INDIVIDUEL[typeDe(lieu)] && (
+                                    <>
+                                        <Label>Effectif du lot</Label>
+                                        <Compteur
+                                            value={an.nb}
+                                            onChange={(v) =>
+                                                setAn({ ...an, nb: v })
+                                            }
+                                        />
+                                    </>
+                                )}
+                                <Sel
+                                    value={an.sexe}
+                                    onChange={(v) => setAn({ ...an, sexe: v })}
+                                    options={['Femelle', 'Mâle', 'Mixte']}
+                                    placeholder="Sexe"
+                                />
+                                <input
+                                    type="date"
+                                    value={an.naissance}
+                                    onChange={(e) =>
+                                        setAn({
+                                            ...an,
+                                            naissance: e.target.value,
+                                        })
+                                    }
+                                    style={{
+                                        width: '100%',
+                                        padding: 14,
+                                        fontSize: 17,
+                                        borderRadius: 4,
+                                        border: `2px solid ${C.line}`,
+                                        marginBottom: 14,
+                                    }}
+                                />
+                                <Sel
+                                    value={an.origine}
+                                    onChange={(v) =>
+                                        setAn({ ...an, origine: v })
+                                    }
+                                    options={ORIGINES}
+                                    placeholder="Origine"
+                                />
+                                <Sel
+                                    value={an.loge}
+                                    onChange={(v) => setAn({ ...an, loge: v })}
+                                    options={logesDe(lieu).map((l) => l.n)}
+                                    placeholder={
+                                        logesDe(lieu).length
+                                            ? `${MOT_LOGE[typeDe(lieu)]} d'affectation`
+                                            : `Aucune ${MOT_LOGE[typeDe(lieu)]} — configurez l'atelier`
+                                    }
+                                />
+                                <Txt
+                                    value={an.notes}
+                                    onChange={(v) =>
+                                        setAn({ ...an, notes: v })
+                                    }
+                                    lines={2}
+                                    placeholder="Observation facultative"
+                                />
+                                <Btn onClick={creerAnimal}>
+                                    Enregistrer l’entrée
+                                </Btn>
+                                <Label>Animaux présents</Label>
+                                {!presentsDe(lieu).length && (
+                                    <div
+                                        style={{
+                                            fontSize: 15,
+                                            color: '#666',
+                                            padding: 12,
+                                        }}
+                                    >
+                                        Aucun animal au registre pour cet
+                                        atelier.
+                                    </div>
+                                )}
+                                {presentsDe(lieu).map((a) => (
+                                    <Card
+                                        key={a.id}
+                                        tone={a.loge ? C.green2 : C.amber}
+                                    >
+                                        <div
+                                            style={{
+                                                display: 'flex',
+                                                justifyContent: 'space-between',
+                                                gap: 8,
+                                            }}
+                                        >
+                                            <div>
+                                                <div
+                                                    style={{
+                                                        fontFamily:
+                                                            'Oswald, sans-serif',
+                                                        fontSize: 17,
+                                                        fontWeight: 700,
+                                                    }}
+                                                >
+                                                    {a.code || a.categorie}
+                                                </div>
+                                                <div
+                                                    style={{
+                                                        fontSize: 14.5,
+                                                        marginTop: 3,
+                                                    }}
+                                                >
+                                                    {a.categorie} · {a.nb}{' '}
+                                                    tête(s) ·{' '}
+                                                    {a.loge || 'sans loge'}
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={() =>
+                                                    setActAn(
+                                                        actAn === a.id
+                                                            ? null
+                                                            : a.id,
+                                                    )
+                                                }
+                                                style={{
+                                                    height: 'fit-content',
+                                                    padding: '7px 10px',
+                                                    border: `1px solid ${C.line}`,
+                                                    borderRadius: 4,
+                                                    background: '#fff',
+                                                    cursor: 'pointer',
+                                                }}
+                                            >
+                                                Actions
+                                            </button>
+                                        </div>
+                                        {actAn === a.id && (
+                                            <div
+                                                style={{
+                                                    marginTop: 10,
+                                                    display: 'grid',
+                                                    gap: 8,
+                                                }}
+                                            >
+                                                <Sel
+                                                    value=""
+                                                    onChange={(v) =>
+                                                        deplacerAnimal(a, v)
+                                                    }
+                                                    options={logesDe(a.atelier)
+                                                        .filter(
+                                                            (l) =>
+                                                                l.n !== a.loge,
+                                                        )
+                                                        .map((l) => l.n)}
+                                                    placeholder="Déplacer vers…"
+                                                />
+                                                <Sel
+                                                    value=""
+                                                    onChange={(v) =>
+                                                        sortirAnimal(a, v)
+                                                    }
+                                                    options={MOTIFS_SORTIE}
+                                                    placeholder="Sortir du registre…"
+                                                />
+                                            </div>
+                                        )}
+                                    </Card>
+                                ))}
+                            </>
+                        )}
+                        <NavBas />
+                    </>
+                )}
+
+                {vue === 'truies' && bureau === 'ANI' && (
+                    <>
+                        {truieOuverte ? (
+                            (() => {
+                                const t = truies.find(
+                                    (x) => x.id === truieOuverte,
+                                );
+                                if (!t)
+                                    return (
+                                        <Btn
+                                            tone="ghost"
+                                            onClick={() =>
+                                                setTruieOuverte('')
+                                            }
+                                        >
+                                            ← Toutes les truies
+                                        </Btn>
+                                    );
+                                const st = statutTruie(t);
+                                const b = bilanTruie(t);
+                                const c = cycleEnCours(t);
+                                return (
+                                    <>
+                                        <div
+                                            style={{
+                                                background: st.c,
+                                                color: '#fff',
+                                                padding: 16,
+                                                borderRadius: 4,
+                                                marginBottom: 14,
+                                            }}
+                                        >
+                                            <div
+                                                style={{
+                                                    fontFamily:
+                                                        'Oswald, sans-serif',
+                                                    fontSize: 30,
+                                                    fontWeight: 700,
+                                                }}
+                                            >
+                                                {nomTruie(t)}
+                                            </div>
+                                            <div
+                                                style={{
+                                                    fontSize: 14.5,
+                                                    marginTop: 5,
+                                                    lineHeight: 1.55,
+                                                }}
+                                            >
+                                                {st.t} · ligne {t.ligne} ·
+                                                cohorte {t.cohorte || '—'} ·{' '}
+                                                {t.atelier || 'atelier non précisé'}
+                                            </div>
+                                        </div>
+                                        <div
+                                            className="farm-grid-2"
+                                            style={{
+                                                display: 'grid',
+                                                gridTemplateColumns:
+                                                    'repeat(2, minmax(0, 1fr))',
+                                                gap: 8,
+                                                marginBottom: 14,
+                                            }}
+                                        >
+                                            {[
+                                                ['Portées', b.portees],
+                                                ['Nés vivants', b.moyNes],
+                                                ['Sevrés', b.moySevres],
+                                                [
+                                                    'Mortalité',
+                                                    b.mortalite === '—'
+                                                        ? '—'
+                                                        : `${b.mortalite} %`,
+                                                ],
+                                            ].map(([k, v]) => (
+                                                <div
+                                                    key={k}
+                                                    style={{
+                                                        background: '#fff',
+                                                        border: `1px solid ${C.line}`,
+                                                        borderRadius: 4,
+                                                        padding: 10,
+                                                        textAlign: 'center',
+                                                    }}
+                                                >
+                                                    <div
+                                                        style={{
+                                                            fontFamily:
+                                                                'Oswald, sans-serif',
+                                                            fontSize: 20,
+                                                            fontWeight: 700,
+                                                        }}
+                                                    >
+                                                        {v}
+                                                    </div>
+                                                    <div
+                                                        style={{
+                                                            fontSize: 11.5,
+                                                            color: '#666',
+                                                        }}
+                                                    >
+                                                        {k}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        {!t.reforme && !c && (
+                                            <>
+                                                <Label>
+                                                    Enregistrer une saillie
+                                                </Label>
+                                                <input
+                                                    type="date"
+                                                    value={cy.saillie}
+                                                    onChange={(e) =>
+                                                        setCy({
+                                                            ...cy,
+                                                            saillie:
+                                                                e.target.value,
+                                                        })
+                                                    }
+                                                    style={{
+                                                        width: '100%',
+                                                        padding: 14,
+                                                        fontSize: 17,
+                                                        borderRadius: 4,
+                                                        border: `2px solid ${C.line}`,
+                                                        marginBottom: 14,
+                                                    }}
+                                                />
+                                                <Sel
+                                                    value={cy.verrat}
+                                                    onChange={(v) =>
+                                                        setCy({
+                                                            ...cy,
+                                                            verrat: v,
+                                                        })
+                                                    }
+                                                    options={VERRATS.filter(
+                                                        (v) =>
+                                                            v !==
+                                                            t.verratInterdit,
+                                                    )}
+                                                    placeholder="Verrat utilisé"
+                                                />
+                                                {cy.saillie && (
+                                                    <div
+                                                        style={{
+                                                            fontSize: 14,
+                                                            color: C.green2,
+                                                            marginTop: -8,
+                                                            marginBottom: 14,
+                                                            fontWeight: 600,
+                                                        }}
+                                                    >
+                                                        Mise bas prévue le{' '}
+                                                        {plusJours(
+                                                            cy.saillie,
+                                                            GESTATION,
+                                                        )}{' '}
+                                                        — gestation 114 jours
+                                                    </div>
+                                                )}
+                                                <Txt
+                                                    value={cy.notes}
+                                                    onChange={(v) =>
+                                                        setCy({
+                                                            ...cy,
+                                                            notes: v,
+                                                        })
+                                                    }
+                                                    placeholder="Observation facultative"
+                                                />
+                                                <Btn
+                                                    onClick={() =>
+                                                        enregistrerSaillie(t)
+                                                    }
+                                                >
+                                                    Enregistrer la saillie
+                                                </Btn>
+                                            </>
+                                        )}
+                                        {!t.reforme && c && !c.misBas && (
+                                            <>
+                                                <Label>
+                                                    Cycle {c.n} — mise bas
+                                                </Label>
+                                                <Card tone={C.green2}>
+                                                    Saillie le {c.saillie} par{' '}
+                                                    <b>{c.verrat}</b> · prévue
+                                                    le <b>{c.misBasPrevue}</b>
+                                                </Card>
+                                                <input
+                                                    type="date"
+                                                    value={cy.misBas}
+                                                    onChange={(e) =>
+                                                        setCy({
+                                                            ...cy,
+                                                            misBas:
+                                                                e.target.value,
+                                                        })
+                                                    }
+                                                    style={{
+                                                        width: '100%',
+                                                        padding: 14,
+                                                        fontSize: 17,
+                                                        borderRadius: 4,
+                                                        border: `2px solid ${C.line}`,
+                                                        marginBottom: 14,
+                                                    }}
+                                                />
+                                                <Label>Nés totaux</Label>
+                                                <Compteur
+                                                    value={cy.nesTotal}
+                                                    onChange={(v) =>
+                                                        setCy({
+                                                            ...cy,
+                                                            nesTotal: v,
+                                                        })
+                                                    }
+                                                />
+                                                <Label>Nés vivants</Label>
+                                                <Compteur
+                                                    value={cy.nesVivants}
+                                                    onChange={(v) =>
+                                                        setCy({
+                                                            ...cy,
+                                                            nesVivants: v,
+                                                        })
+                                                    }
+                                                />
+                                                <Btn
+                                                    onClick={() =>
+                                                        enregistrerMiseBas(t)
+                                                    }
+                                                >
+                                                    Enregistrer la mise bas
+                                                </Btn>
+                                            </>
+                                        )}
+                                        {!t.reforme && c && c.misBas && (
+                                            <>
+                                                <Label>
+                                                    Cycle {c.n} — sevrage
+                                                </Label>
+                                                <Card tone={C.laterite}>
+                                                    Mise bas le {c.misBas} ·{' '}
+                                                    {c.nesVivants} nés vivants ·
+                                                    sevrage prévu le{' '}
+                                                    <b>{c.sevragePrevu}</b>
+                                                </Card>
+                                                <input
+                                                    type="date"
+                                                    value={cy.sevrage}
+                                                    onChange={(e) =>
+                                                        setCy({
+                                                            ...cy,
+                                                            sevrage:
+                                                                e.target.value,
+                                                        })
+                                                    }
+                                                    style={{
+                                                        width: '100%',
+                                                        padding: 14,
+                                                        fontSize: 17,
+                                                        borderRadius: 4,
+                                                        border: `2px solid ${C.line}`,
+                                                        marginBottom: 14,
+                                                    }}
+                                                />
+                                                <Label>Porcelets sevrés</Label>
+                                                <Compteur
+                                                    value={cy.sevres}
+                                                    onChange={(v) =>
+                                                        setCy({
+                                                            ...cy,
+                                                            sevres: v,
+                                                        })
+                                                    }
+                                                />
+                                                <Label>
+                                                    Poids moyen au sevrage
+                                                </Label>
+                                                <Compteur
+                                                    value={cy.poidsSevrage}
+                                                    onChange={(v) =>
+                                                        setCy({
+                                                            ...cy,
+                                                            poidsSevrage: v,
+                                                        })
+                                                    }
+                                                />
+                                                <Btn
+                                                    onClick={() =>
+                                                        enregistrerSevrage(t)
+                                                    }
+                                                >
+                                                    Enregistrer le sevrage
+                                                </Btn>
+                                            </>
+                                        )}
+                                        <Label>Historique des cycles</Label>
+                                        {(t.cycles || []).length ? (
+                                            (t.cycles || [])
+                                                .slice()
+                                                .reverse()
+                                                .map((x) => (
+                                                    <Card
+                                                        key={x.n}
+                                                        tone={
+                                                            x.sevrage
+                                                                ? C.green2
+                                                                : x.misBas
+                                                                  ? C.laterite
+                                                                  : C.green
+                                                        }
+                                                    >
+                                                        <div
+                                                            style={{
+                                                                fontFamily:
+                                                                    'Oswald, sans-serif',
+                                                                fontWeight: 700,
+                                                            }}
+                                                        >
+                                                            Cycle {x.n} —
+                                                            saillie {x.saillie}{' '}
+                                                            par {x.verrat}
+                                                        </div>
+                                                        <div
+                                                            style={{
+                                                                fontSize: 14,
+                                                                marginTop: 3,
+                                                            }}
+                                                        >
+                                                            Mise bas prévue{' '}
+                                                            {x.misBasPrevue}
+                                                            {x.misBas
+                                                                ? ` · réelle ${x.misBas}`
+                                                                : ''}
+                                                            {x.sevrage
+                                                                ? ` · sevrage ${x.sevrage} (${x.ageSevrage} j)`
+                                                                : ''}
+                                                        </div>
+                                                    </Card>
+                                                ))
+                                        ) : (
+                                            <div
+                                                style={{
+                                                    fontSize: 15,
+                                                    color: '#666',
+                                                    padding: 12,
+                                                }}
+                                            >
+                                                Aucun cycle enregistré.
+                                            </div>
+                                        )}
+                                        {!t.reforme && (
+                                            <>
+                                                <Label>Réformer cette truie</Label>
+                                                <Sel
+                                                    value={rf}
+                                                    onChange={setRf}
+                                                    options={MOTIFS_REFORME}
+                                                    placeholder="Motif"
+                                                />
+                                                <Btn
+                                                    tone="danger"
+                                                    onClick={() => reformer(t)}
+                                                >
+                                                    Réformer
+                                                </Btn>
+                                            </>
+                                        )}
+                                        <Btn
+                                            tone="ghost"
+                                            onClick={() => setTruieOuverte('')}
+                                        >
+                                            ← Toutes les truies
+                                        </Btn>
+                                    </>
+                                );
+                            })()
+                        ) : (
+                            <>
+                                {alertesTruies().length > 0 && (
+                                    <div
+                                        style={{
+                                            background: alertesTruies().some(
+                                                (a) => a.urg,
+                                            )
+                                                ? C.red
+                                                : C.amber,
+                                            color: '#fff',
+                                            padding: 14,
+                                            borderRadius: 4,
+                                            marginBottom: 14,
+                                        }}
+                                    >
+                                        <div
+                                            style={{
+                                                fontFamily:
+                                                    'Oswald, sans-serif',
+                                                fontSize: 16,
+                                                fontWeight: 700,
+                                            }}
+                                        >
+                                            MATERNITÉ — {alertesTruies().length}{' '}
+                                            ÉCHÉANCE(S)
+                                        </div>
+                                        {alertesTruies()
+                                            .slice(0, 5)
+                                            .map((a, i) => (
+                                                <div
+                                                    key={i}
+                                                    style={{
+                                                        fontSize: 14,
+                                                        marginTop: 4,
+                                                    }}
+                                                >
+                                                    · {nomTruie(a.t)} — {a.txt}
+                                                </div>
+                                            ))}
+                                    </div>
+                                )}
+                                <Label>Tableau de saillie</Label>
+                                {truies
+                                    .filter((t) => !t.reforme)
+                                    .map((t) => {
+                                        const st = statutTruie(t);
+                                        const c = cycleEnCours(t);
+                                        return (
+                                            <button
+                                                key={t.id}
+                                                onClick={() =>
+                                                    setTruieOuverte(t.id)
+                                                }
+                                                style={{
+                                                    width: '100%',
+                                                    textAlign: 'left',
+                                                    padding: 14,
+                                                    marginBottom: 8,
+                                                    borderRadius: 4,
+                                                    border: `1px solid ${C.line}`,
+                                                    borderLeft: `5px solid ${st.c}`,
+                                                    background: '#fff',
+                                                    cursor: 'pointer',
+                                                }}
+                                            >
+                                                <div
+                                                    style={{
+                                                        display: 'flex',
+                                                        justifyContent:
+                                                            'space-between',
+                                                        gap: 8,
+                                                    }}
+                                                >
+                                                    <div
+                                                        style={{
+                                                            fontFamily:
+                                                                'Oswald, sans-serif',
+                                                            fontSize: 18,
+                                                            fontWeight: 700,
+                                                        }}
+                                                    >
+                                                        {nomTruie(t)}
+                                                    </div>
+                                                    <div
+                                                        style={{
+                                                            fontSize: 11,
+                                                            fontWeight: 700,
+                                                            background: st.c,
+                                                            color: '#fff',
+                                                            padding: '3px 8px',
+                                                            borderRadius: 3,
+                                                        }}
+                                                    >
+                                                        {st.t}
+                                                    </div>
+                                                </div>
+                                                <div
+                                                    style={{
+                                                        fontSize: 14,
+                                                        color: '#666',
+                                                        marginTop: 3,
+                                                    }}
+                                                >
+                                                    Cohorte {t.cohorte || '—'} ·
+                                                    verrat interdit{' '}
+                                                    {t.verratInterdit || '—'}
+                                                    {c?.misBasPrevue
+                                                        ? ` · mise bas prévue ${c.misBasPrevue}`
+                                                        : ''}
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                <Label>Enregistrer une truie</Label>
+                                <div
+                                    style={{
+                                        background: '#fff',
+                                        borderLeft: `5px solid ${C.amber}`,
+                                        padding: 12,
+                                        borderRadius: 4,
+                                        marginBottom: 14,
+                                        fontSize: 14,
+                                        lineHeight: 1.5,
+                                    }}
+                                >
+                                    Le numéro de série devient l’identité
+                                    définitive. Il n’est jamais réattribué.
+                                </div>
+                                <Sel
+                                    value={tr.couleur}
+                                    onChange={(v) =>
+                                        setTr({
+                                            ...tr,
+                                            couleur: v,
+                                            cohorte:
+                                                v === 'Jaune' ? '' : tr.cohorte,
+                                        })
+                                    }
+                                    options={['Verte', 'Jaune']}
+                                    placeholder="Couleur de boucle"
+                                />
+                                <Txt
+                                    value={tr.serie}
+                                    onChange={(v) =>
+                                        setTr({ ...tr, serie: v })
+                                    }
+                                    placeholder="Numéro de série, ex : 203"
+                                />
+                                {tr.couleur === 'Verte' && (
+                                    <Sel
+                                        value={tr.cohorte}
+                                        onChange={(v) =>
+                                            setTr({ ...tr, cohorte: v })
+                                        }
+                                        options={COHORTES.map((x) => x.c)}
+                                        placeholder="Cohorte — oreille droite"
+                                    />
+                                )}
+                                <Txt
+                                    value={tr.encoche}
+                                    onChange={(v) =>
+                                        setTr({ ...tr, encoche: v })
+                                    }
+                                    placeholder="Encoche auriculaire"
+                                />
+                                <input
+                                    type="date"
+                                    value={tr.naissance}
+                                    onChange={(e) =>
+                                        setTr({
+                                            ...tr,
+                                            naissance: e.target.value,
+                                        })
+                                    }
+                                    style={{
+                                        width: '100%',
+                                        padding: 14,
+                                        fontSize: 17,
+                                        borderRadius: 4,
+                                        border: `2px solid ${C.line}`,
+                                        marginBottom: 14,
+                                    }}
+                                />
+                                <Sel
+                                    value={tr.origine}
+                                    onChange={(v) =>
+                                        setTr({ ...tr, origine: v })
+                                    }
+                                    options={ORIGINES}
+                                    placeholder="Origine"
+                                />
+                                <Sel
+                                    value={tr.pere}
+                                    onChange={(v) =>
+                                        setTr({ ...tr, pere: v })
+                                    }
+                                    options={VERRATS}
+                                    placeholder="Père"
+                                />
+                                <Sel
+                                    value={tr.atelier}
+                                    onChange={(v) =>
+                                        setTr({ ...tr, atelier: v })
+                                    }
+                                    options={ATELIERS_PORC}
+                                    placeholder="Atelier"
+                                />
+                                <Btn onClick={creerTruie}>
+                                    Créer la fiche
+                                </Btn>
+                            </>
+                        )}
                         <NavBas />
                     </>
                 )}
@@ -6565,6 +8661,141 @@ export default function App({
                             ← Accueil
                         </Btn>
                     </>
+                )}
+
+                {dialog && (
+                    <div
+                        style={{
+                            position: 'fixed',
+                            inset: 0,
+                            background: 'rgba(16, 24, 20, 0.48)',
+                            zIndex: 35,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            padding: 18,
+                        }}
+                        role="dialog"
+                        aria-modal="true"
+                    >
+                        <div
+                            style={{
+                                width: '100%',
+                                maxWidth: 520,
+                                background: '#fff',
+                                borderRadius: 18,
+                                boxShadow: '0 24px 70px rgba(23, 53, 42, 0.28)',
+                                border: `1px solid ${C.line}`,
+                                overflow: 'hidden',
+                            }}
+                        >
+                            <div
+                                style={{
+                                    padding: '20px 22px',
+                                    borderBottom: `1px solid ${C.line}`,
+                                    background: '#FBFAF7',
+                                }}
+                            >
+                                <div
+                                    style={{
+                                        fontFamily: 'Oswald, sans-serif',
+                                        fontSize: 21,
+                                        fontWeight: 800,
+                                        color: C.ink,
+                                    }}
+                                >
+                                    {dialog.title}
+                                </div>
+                                <div
+                                    style={{
+                                        marginTop: 8,
+                                        whiteSpace: 'pre-wrap',
+                                        fontSize: 14.5,
+                                        lineHeight: 1.6,
+                                        color: '#526057',
+                                    }}
+                                >
+                                    {dialog.message}
+                                </div>
+                            </div>
+
+                            <div style={{ padding: 22 }}>
+                                {dialog.type === 'prompt' && (
+                                    <input
+                                        autoFocus
+                                        value={dialog.value}
+                                        onChange={(event) =>
+                                            setDialog({
+                                                ...dialog,
+                                                value: event.target.value,
+                                            })
+                                        }
+                                        onKeyDown={(event) => {
+                                            if (event.key === 'Enter') {
+                                                fermerDialog(dialog.value);
+                                            }
+                                            if (event.key === 'Escape') {
+                                                fermerDialog('');
+                                            }
+                                        }}
+                                        placeholder={dialog.placeholder}
+                                        style={{
+                                            width: '100%',
+                                            minHeight: 48,
+                                            border: `1px solid ${C.line}`,
+                                            borderRadius: 12,
+                                            padding: '0 14px',
+                                            fontSize: 15,
+                                            outline: 'none',
+                                            boxSizing: 'border-box',
+                                        }}
+                                    />
+                                )}
+
+                                <div
+                                    style={{
+                                        display: 'flex',
+                                        justifyContent: 'flex-end',
+                                        gap: 10,
+                                        marginTop: dialog.type === 'prompt' ? 18 : 0,
+                                    }}
+                                >
+                                    <button
+                                        type="button"
+                                        onClick={() => fermerDialog(dialog.type === 'prompt' ? '' : false)}
+                                        style={{
+                                            padding: '12px 16px',
+                                            background: '#F3F1EB',
+                                            color: '#526057',
+                                            border: `1px solid ${C.line}`,
+                                            borderRadius: 10,
+                                            fontFamily: 'Oswald, sans-serif',
+                                            fontWeight: 700,
+                                            cursor: 'pointer',
+                                        }}
+                                    >
+                                        {dialog.cancelLabel}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => fermerDialog(dialog.type === 'prompt' ? dialog.value : true)}
+                                        style={{
+                                            padding: '12px 16px',
+                                            background: C.laterite,
+                                            color: '#fff',
+                                            border: 'none',
+                                            borderRadius: 10,
+                                            fontFamily: 'Oswald, sans-serif',
+                                            fontWeight: 700,
+                                            cursor: 'pointer',
+                                        }}
+                                    >
+                                        {dialog.confirmLabel}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 )}
 
                 {etat && (

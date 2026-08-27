@@ -12,6 +12,7 @@ import {
     Undo2,
 } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
+import { useConfirmDialog } from '@/hooks/use-confirm-dialog';
 
 type Point = [number, number];
 type Feature = {
@@ -59,6 +60,7 @@ export default function MapAdmin({
     features: Feature[];
     canvas: { width: number; height: number };
 }) {
+    const { confirm, ConfirmDialog } = useConfirmDialog();
     const svgRef = useRef<SVGSVGElement>(null);
     const [selectedId, setSelectedId] = useState<number | null>(null);
     const [drawing, setDrawing] = useState(false);
@@ -146,10 +148,17 @@ export default function MapAdmin({
         }
     };
 
-    const remove = () => {
+    const remove = async () => {
+        if (!selected) {
+            return;
+        }
         if (
-            !selected ||
-            !window.confirm(`Supprimer « ${selected.name} » de la carte ?`)
+            !(await confirm({
+                title: 'Confirmation de suppression',
+                description: `Supprimer « ${selected.name} » de la carte ?`,
+                confirmText: 'Supprimer',
+                variant: 'destructive',
+            }))
         ) {
             return;
         }
@@ -183,6 +192,7 @@ export default function MapAdmin({
 
     return (
         <div className="admin-screen min-h-screen bg-[#f4f1e8] text-[#17352a]">
+            <ConfirmDialog />
             <Head title="Éditeur du plan de la ferme" />
             <header className="border-b border-white/10 bg-[#123f29] text-white">
                 <div className="mx-auto flex max-w-[1500px] flex-col gap-4 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
@@ -237,13 +247,13 @@ export default function MapAdmin({
                     </div>
                     <button
                         onClick={newFeature}
-                        className="flex items-center justify-center gap-2 rounded-xl bg-[#174a31] px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[#103b27]"
+                        className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#174a31] px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[#103b27] sm:w-auto"
                     >
                         <Plus className="size-4" /> Nouvelle zone
                     </button>
                 </div>
 
-                <div className="grid gap-5 xl:grid-cols-[250px_minmax(420px,1fr)_330px]">
+                <div className="grid min-w-0 gap-5 xl:grid-cols-[250px_minmax(0,1fr)_330px]">
                     <aside className="max-h-64 overflow-y-auto rounded-2xl border border-[#d9d3c6] bg-white p-3 shadow-sm xl:max-h-[760px]">
                         <div className="px-3 py-2 text-xs font-semibold tracking-[.14em] text-[#879189]">
                             {features.length} FORMES
@@ -279,7 +289,7 @@ export default function MapAdmin({
                     </aside>
 
                     <section className="overflow-hidden rounded-2xl border border-[#d5cfc2] bg-white p-3 shadow-sm">
-                        <div className="mb-3 flex items-center justify-between gap-3 rounded-xl bg-[#f4f1e9] px-4 py-3">
+                        <div className="mb-3 flex flex-col justify-between gap-3 rounded-xl bg-[#f4f1e9] px-4 py-3 sm:flex-row sm:items-center">
                             <div className="flex items-center gap-2 text-sm font-semibold">
                                 {drawing ? (
                                     <Edit3 className="size-4 text-[#b16a2f]" />
@@ -287,8 +297,8 @@ export default function MapAdmin({
                                     <MousePointer2 className="size-4" />
                                 )}
                                 {drawing
-                                    ? `Dessin en cours · ${form.data.points.length} points`
-                                    : 'Sélectionnez une forme pour la modifier'}
+                                    ? `Dessin en cours · ${form.data.points.length} point(s)`
+                                    : 'Sélectionnez une forme ou créez une nouvelle zone'}
                             </div>
                             {drawing && (
                                 <button
@@ -306,7 +316,7 @@ export default function MapAdmin({
                                 </button>
                             )}
                         </div>
-                        <div className="mx-auto max-w-[620px] overflow-hidden rounded-xl border border-[#d7d2c7] bg-[#fbfaf6]">
+                        <div className="mx-auto w-full max-w-[620px] overflow-hidden rounded-xl border border-[#d7d2c7] bg-[#fbfaf6]">
                             <svg
                                 ref={svgRef}
                                 viewBox={`0 0 ${canvas.width} ${canvas.height}`}
@@ -444,6 +454,9 @@ export default function MapAdmin({
                                     {form.errors.name}
                                 </span>
                             )}
+                            <span className="text-xs font-normal text-[#68746d]">
+                                Nom visible dans l’application terrain et le cockpit.
+                            </span>
                         </label>
                         <label className="mt-4 grid gap-1.5 text-sm font-semibold">
                             Type
@@ -464,8 +477,11 @@ export default function MapAdmin({
                                     </option>
                                 ))}
                             </select>
+                            <span className="text-xs font-normal text-[#68746d]">
+                                Le type contrôle la couleur et le sens métier de la zone.
+                            </span>
                         </label>
-                        <div className="mt-4 grid grid-cols-2 gap-3">
+                        <div className="mt-4 grid gap-3 sm:grid-cols-2">
                             <label className="grid gap-1.5 text-sm font-semibold">
                                 Surface ha
                                 <input

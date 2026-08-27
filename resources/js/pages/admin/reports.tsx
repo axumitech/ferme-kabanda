@@ -254,7 +254,7 @@ export default function ReportsAdmin({ reports }: { reports: Report[] }) {
                     </div>
                 </div>
 
-                <div className="grid gap-5 lg:grid-cols-[300px_1fr]">
+                <div className="grid min-w-0 gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
                     <aside className="admin-sidebar-nav max-h-80 lg:max-h-[760px] print:hidden">
                         <div className="admin-sidebar-section-label">
                             {filtered.length} RAPPORT(S)

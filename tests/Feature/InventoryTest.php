@@ -2,9 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\Article;
 use App\Models\FarmRecord;
-use App\Models\InventoryItem;
-use App\Models\InventoryMovement;
+use App\Models\MouvementStock;
 use App\Models\ProductStock;
 use App\Models\ProductStockMovement;
 use App\Models\User;
@@ -39,37 +39,36 @@ class InventoryTest extends TestCase
             'cree' => '2026-08-26',
         ]]];
 
-        $this->actingAs($user)
+        $response = $this->actingAs($user)
             ->putJson(route('inventory.items.sync'), $payload)
-            ->assertOk()
+            ->assertOk();
+
+        $response
             ->assertJsonPath('items.0.code', 'ENG-001')
             ->assertJsonPath('items.0.qte', 20);
 
-        $item = InventoryItem::query()->whereBelongsTo($user)->firstOrFail();
-        $this->assertSame('ENG', $item->category->code);
-        $this->assertSame('20.000', $item->quantity_on_hand);
-        $this->assertDatabaseHas('inventory_movements', [
-            'inventory_item_id' => $item->id,
-            'movement_type' => 'opening_balance',
-            'quantity_before' => 0,
-            'quantity_after' => 20,
+        $item = Article::query()->where('code', 'ENG-001')->firstOrFail();
+        $this->assertSame('ENG', $item->categorie);
+        $this->assertSame('1000000.000000', $item->quantite_base);
+        $this->assertDatabaseHas('mouvements_stock', [
+            'article_id' => $item->id,
+            'type' => 'entree',
+            'quantite' => 20,
         ]);
         $this->assertFalse(FarmRecord::query()->whereBelongsTo($user)->where('record_key', 'articles')->exists());
 
         $payload['items'][0]['qte'] = 12.5;
         $this->actingAs($user)->putJson(route('inventory.items.sync'), $payload)->assertOk();
 
-        $this->assertSame(2, InventoryMovement::query()->whereBelongsTo($user)->count());
-        $this->assertDatabaseHas('inventory_movements', [
-            'inventory_item_id' => $item->id,
-            'movement_type' => 'adjustment_out',
-            'quantity_change' => -7.5,
-            'quantity_before' => 20,
-            'quantity_after' => 12.5,
+        $this->assertSame(2, MouvementStock::query()->where('article_id', $item->id)->count());
+        $this->assertDatabaseHas('mouvements_stock', [
+            'article_id' => $item->id,
+            'type' => 'sortie',
+            'quantite' => 7.5,
         ]);
 
         $this->actingAs($user)->putJson(route('inventory.items.sync'), $payload)->assertOk();
-        $this->assertSame(2, InventoryMovement::query()->whereBelongsTo($user)->count());
+        $this->assertSame(2, MouvementStock::query()->where('article_id', $item->id)->count());
     }
 
     public function test_product_stocks_are_isolated_and_every_change_is_audited(): void

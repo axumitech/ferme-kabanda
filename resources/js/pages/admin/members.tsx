@@ -11,6 +11,7 @@ import {
     Users,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { useConfirmDialog } from '@/hooks/use-confirm-dialog';
 import { AdminLayout } from './AdminLayout';
 
 type Member = {
@@ -53,6 +54,7 @@ export default function MembersAdmin({
     teamMembers,
     initialReferenceItemId,
 }: Props) {
+    const { confirm, ConfirmDialog } = useConfirmDialog();
     const { auth } = usePage().props;
     const currentUser = auth.user as { id: number };
     const [editing, setEditing] = useState<Member | null>(null);
@@ -114,10 +116,16 @@ export default function MembersAdmin({
         }
     };
 
-    const remove = (member: Member) => {
+    const remove = async (member: Member) => {
+        if (member.id === currentUser.id) return;
+        
         if (
-            member.id !== currentUser.id &&
-            window.confirm(`Supprimer le compte de ${member.name} ?`)
+            await confirm({
+                title: 'Confirmation de suppression',
+                description: `Supprimer le compte de ${member.name} ?`,
+                confirmText: 'Supprimer',
+                variant: 'destructive',
+            })
         ) {
             router.delete(`/admin/members/${member.id}`, {
                 preserveScroll: true,
@@ -130,9 +138,10 @@ export default function MembersAdmin({
             title="Gestion des membres"
             subtitle="Gérez l'accès à l'application"
         >
+            <ConfirmDialog />
             <Head title="Gestion des membres" />
 
-            <div className="admin-animate-in mx-auto grid max-w-7xl gap-6 lg:grid-cols-[380px_1fr]">
+            <div className="admin-animate-in mx-auto grid min-w-0 max-w-7xl gap-6 lg:grid-cols-[380px_minmax(0,1fr)]">
                 <section className="h-fit admin-form-panel lg:sticky lg:top-5">
                     <div className="mb-5 flex items-center gap-3">
                         <div className="rounded-xl bg-[#e7f1e9] p-2.5 text-[#276644]">
@@ -193,6 +202,9 @@ export default function MembersAdmin({
                                 required
                             />
                         </Field>
+                        <p className="admin-form-hint -mt-2">
+                            Utilisez le nom que l’équipe reconnaît sur les feuilles terrain.
+                        </p>
                         <Field
                             label="Numéro de téléphone"
                             error={form.errors.phone}
@@ -208,6 +220,9 @@ export default function MembersAdmin({
                                 required
                             />
                         </Field>
+                        <p className="admin-form-hint -mt-2">
+                            Le téléphone devient l’identifiant simple pour les agents sans e-mail.
+                        </p>
                         <Field
                             label="Adresse e-mail (facultative)"
                             error={form.errors.email}
@@ -247,6 +262,9 @@ export default function MembersAdmin({
                                     }
                                     required={!editing}
                                 />
+                                {!editing && (
+                                    <span className="admin-form-hint">Minimum 8 caractères.</span>
+                                )}
                             </Field>
                             <Field
                                 label="Confirmation"
@@ -297,7 +315,7 @@ export default function MembersAdmin({
                             </p>
                         )}
 
-                        <div className="flex gap-2 pt-2">
+                        <div className="flex flex-col gap-2 pt-2 sm:flex-row">
                             {editing && (
                                 <button
                                     type="button"

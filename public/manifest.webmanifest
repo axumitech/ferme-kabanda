@@ -1,0 +1,47 @@
+{
+    "name": "Ferme Kabanda Naweza",
+    "short_name": "FKN",
+    "description": "Pilotage terrain, tâches, magasin et rapports de la Ferme Kabanda Naweza.",
+    "start_url": "/dashboard",
+    "scope": "/",
+    "display": "standalone",
+    "orientation": "portrait-primary",
+    "theme_color": "#174a31",
+    "background_color": "#f7f6f2",
+    "lang": "fr",
+    "categories": ["business", "productivity", "utilities"],
+    "icons": [
+        {
+            "src": "/favicon.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "/apple-touch-icon.png",
+            "sizes": "180x180",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/brand-logo.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any"
+        }
+    ],
+    "shortcuts": [
+        {
+            "name": "Ma journée",
+            "short_name": "Journée",
+            "url": "/journee",
+            "icons": [{ "src": "/favicon.png", "sizes": "192x192" }]
+        },
+        {
+            "name": "Terrain",
+            "short_name": "Terrain",
+            "url": "/terrain",
+            "icons": [{ "src": "/favicon.png", "sizes": "192x192" }]
+        }
+    ]
+}

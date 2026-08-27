@@ -2,38 +2,39 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\InventoryItem;
-use App\Services\StockSynchronizer;
+use App\Models\Article;
+use App\Models\Unite;
+use App\Services\MagasinService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class InventoryController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $items = InventoryItem::query()
-            ->whereBelongsTo($request->user())
-            ->where('active', true)
-            ->with('category:id,code')
+        $items = Article::query()
+            ->where('actif', true)
+            ->with(['uniteUsage:id,code,nom,dimension,vers_base,conditionnement'])
             ->orderBy('code')
             ->get()
-            ->map(fn (InventoryItem $item): array => [
-                'cat' => $item->category->code,
-                'lib' => $item->name,
-                'unite' => $item->unit,
-                'qte' => (float) $item->quantity_on_hand,
-                'pu' => (float) $item->unit_price,
-                'mini' => $item->minimum_quantity === null ? '' : (float) $item->minimum_quantity,
-                'cc' => $item->cost_center ?? '',
-                'code' => $item->code,
-                'cree' => $item->created_on?->toDateString(),
+            ->map(fn (Article $article): array => [
+                'cat' => $article->categorie,
+                'lib' => $article->libelle,
+                'unite' => $article->uniteUsage->code,
+                'qte' => $article->stockUsage(),
+                'pu' => (float) ($article->prix_unitaire ?? 0),
+                'mini' => $article->seuil_min === null ? '' : (float) $article->seuil_min,
+                'cc' => $article->centre_cout ?? '',
+                'code' => $article->code,
+                'cree' => $article->created_at?->toDateString(),
             ])
             ->values();
 
         return response()->json(['items' => $items]);
     }
 
-    public function sync(Request $request, StockSynchronizer $synchronizer): JsonResponse
+    public function sync(Request $request, MagasinService $magasin): JsonResponse
     {
         $validated = $request->validate([
             'items' => ['required', 'array', 'max:2000'],
@@ -49,8 +50,65 @@ class InventoryController extends Controller
             'items.*.cree' => ['nullable', 'date_format:Y-m-d'],
         ]);
 
-        $synchronizer->syncInventory($request->user(), $validated['items']);
+        DB::transaction(function () use ($validated, $magasin): void {
+            foreach ($validated['items'] as $data) {
+                $unit = $this->resolveUnit((string) $data['unite']);
+                $article = Article::query()->where('code', $data['code'])->lockForUpdate()->first();
+
+                $isNew = $article === null;
+
+                if (! $article) {
+                    $article = Article::query()->create([
+                        'code' => $data['code'],
+                        'categorie' => $data['cat'],
+                        'libelle' => $data['lib'],
+                        'unite_achat_id' => $unit->id,
+                        'unite_usage_id' => $unit->id,
+                        'prix_unitaire' => $data['pu'] ?? 0,
+                        'seuil_min' => filled($data['mini'] ?? null) ? $data['mini'] : null,
+                        'centre_cout' => $data['cc'] ?? null,
+                        'quantite_base' => 0,
+                        'actif' => true,
+                    ]);
+                } else {
+                    $article->update([
+                        'categorie' => $data['cat'],
+                        'libelle' => $data['lib'],
+                        'unite_achat_id' => $unit->id,
+                        'unite_usage_id' => $unit->id,
+                        'prix_unitaire' => $data['pu'] ?? 0,
+                        'seuil_min' => filled($data['mini'] ?? null) ? $data['mini'] : null,
+                        'centre_cout' => $data['cc'] ?? null,
+                        'actif' => true,
+                    ]);
+                }
+
+                $article->load('uniteUsage');
+
+                if ($isNew && (float) $data['qte'] > 0) {
+                    $magasin->entree($article, (float) $data['qte'], $unit, "Solde d'ouverture synchronisé");
+                } elseif (abs($article->stockUsage() - (float) $data['qte']) > 0.0001) {
+                    $magasin->inventaire($article, (float) $data['qte'], $unit, 'Synchronisation terrain');
+                }
+            }
+        }, 3);
 
         return $this->index($request);
+    }
+
+    private function resolveUnit(string $rawUnit): Unite
+    {
+        $code = match ($rawUnit) {
+            'litre' => 'l',
+            'sac 50 kg' => 'sac_50kg',
+            'sac 25 kg' => 'sac_25kg',
+            'pièce' => 'piece',
+            'bidon' => 'bidon_5l',
+            'boîte' => 'boite_12',
+            'mètre' => 'm',
+            default => $rawUnit,
+        };
+
+        return Unite::query()->where('code', $code)->firstOrFail();
     }
 }

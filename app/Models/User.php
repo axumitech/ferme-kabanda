@@ -23,16 +23,22 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property string $name
  * @property string|null $email
  * @property string|null $phone
+ * @property string|null $matricule
+ * @property string|null $fonction
+ * @property int|null $site_id
+ * @property int|null $departement_id
+ * @property bool $actif
  * @property Carbon|null $email_verified_at
  * @property string $password
  * @property string|null $two_factor_secret
  * @property string|null $two_factor_recovery_codes
  * @property Carbon|null $two_factor_confirmed_at
+ * @property Carbon|null $derniere_connexion_at
  * @property string|null $remember_token
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['name', 'email', 'phone', 'reference_item_id', 'email_verified_at', 'password', 'is_admin'])]
+#[Fillable(['name', 'email', 'phone', 'reference_item_id', 'email_verified_at', 'password', 'is_admin', 'matricule', 'fonction', 'site_id', 'departement_id', 'actif', 'locale', 'derniere_connexion_at'])]
 #[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
 class User extends Authenticatable implements PasskeyUser
 {
@@ -58,6 +64,24 @@ class User extends Authenticatable implements PasskeyUser
     public function teamMember(): BelongsTo
     {
         return $this->belongsTo(ReferenceItem::class, 'reference_item_id');
+    }
+
+    /** @return BelongsTo<Site, $this> */
+    public function site(): BelongsTo
+    {
+        return $this->belongsTo(Site::class);
+    }
+
+    /** @return BelongsTo<Departement, $this> */
+    public function departement(): BelongsTo
+    {
+        return $this->belongsTo(Departement::class);
+    }
+
+    /** @return HasMany<Tache, $this> */
+    public function taches(): HasMany
+    {
+        return $this->hasMany(Tache::class, 'responsable_id');
     }
 
     /** @return HasMany<InventoryItem, $this> */
@@ -101,7 +125,10 @@ class User extends Authenticatable implements PasskeyUser
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_admin' => 'boolean',
+            'actif' => 'boolean',
+            'locale' => 'string',
             'two_factor_confirmed_at' => 'datetime',
+            'derniere_connexion_at' => 'datetime',
         ];
     }
 }

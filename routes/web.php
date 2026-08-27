@@ -3,12 +3,15 @@
 use App\Http\Controllers\Admin\InventoryController as AdminInventoryController;
 use App\Http\Controllers\Admin\MapFeatureController;
 use App\Http\Controllers\Admin\MemberController;
+use App\Http\Controllers\Admin\OperationController;
 use App\Http\Controllers\Admin\ReferenceItemController;
 use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FarmRecordController;
+use App\Http\Controllers\FieldAppController;
 use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\MaterialAssignmentController;
+use App\Http\Controllers\MyDayController;
 use App\Http\Controllers\ProductStockController;
 use Illuminate\Support\Facades\Route;
 
@@ -16,6 +19,10 @@ Route::get('/', fn () => redirect()->route(auth()->check() ? 'dashboard' : 'logi
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
+    Route::get('journee', [MyDayController::class, 'index'])->name('my-day.index');
+    Route::post('journee/taches/{tache}/complete', [MyDayController::class, 'complete'])->name('my-day.tasks.complete');
+    Route::post('journee/taches/{tache}/justify', [MyDayController::class, 'justify'])->name('my-day.tasks.justify');
+    Route::get('terrain', FieldAppController::class)->name('field-app');
 
     Route::get('farm-data', [FarmRecordController::class, 'index'])->name('farm-data.index');
     Route::get('farm-data/{recordKey}', [FarmRecordController::class, 'show'])->name('farm-data.show');
@@ -30,9 +37,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('admin', [ReferenceItemController::class, 'index'])->name('admin.index');
     Route::get('admin/inventory', [AdminInventoryController::class, 'index'])->name('admin.inventory.index');
+    Route::get('admin/operations', [OperationController::class, 'index'])->name('admin.operations.index');
+    Route::post('admin/operations/tasks', [OperationController::class, 'store'])->name('admin.operations.tasks.store');
+    Route::post('admin/operations/tasks/{tache}/complete', [OperationController::class, 'complete'])->name('admin.operations.tasks.complete');
+    Route::post('admin/operations/tasks/{tache}/justify', [OperationController::class, 'justify'])->name('admin.operations.tasks.justify');
+    Route::post('admin/operations/close-day', [OperationController::class, 'close'])->name('admin.operations.close-day');
     Route::post('admin/inventory/items', [AdminInventoryController::class, 'storeItem'])->name('admin.inventory.items.store');
-    Route::post('admin/inventory/items/{inventoryItem}/adjust', [AdminInventoryController::class, 'adjustItem'])->name('admin.inventory.items.adjust');
-    Route::delete('admin/inventory/items/{inventoryItem}', [AdminInventoryController::class, 'archiveItem'])->name('admin.inventory.items.archive');
+    Route::post('admin/inventory/items/{article}/adjust', [AdminInventoryController::class, 'adjustItem'])->name('admin.inventory.items.adjust');
+    Route::delete('admin/inventory/items/{article}', [AdminInventoryController::class, 'archiveItem'])->name('admin.inventory.items.archive');
     Route::post('admin/inventory/products', [AdminInventoryController::class, 'storeProduct'])->name('admin.inventory.products.store');
     Route::post('admin/inventory/products/{productStock}/adjust', [AdminInventoryController::class, 'adjustProduct'])->name('admin.inventory.products.adjust');
     Route::delete('admin/inventory/products/{productStock}', [AdminInventoryController::class, 'archiveProduct'])->name('admin.inventory.products.archive');
