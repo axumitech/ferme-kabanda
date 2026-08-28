@@ -4925,7 +4925,7 @@ export default function App({
                                             ⚠️ DOSE {w.n} — {w.m}
                                         </div>
                                     )}
-                                    {r.g && (
+                                    {r?.g && (
                                         <div
                                             style={{
                                                 fontSize: 13,
