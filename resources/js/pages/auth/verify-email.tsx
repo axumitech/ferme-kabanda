@@ -5,16 +5,18 @@ import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { logout } from '@/routes';
 import { send } from '@/routes/verification';
+import { useI18n } from '@/lib/i18n';
 
 export default function VerifyEmail({ status }: { status?: string }) {
+    const { tr } = useI18n();
+
     return (
         <>
-            <Head title="Email verification" />
+            <Head title={tr('Vérification de l’e-mail')} />
 
             {status === 'verification-link-sent' && (
                 <div className="mb-4 text-center text-sm font-medium text-green-600">
-                    A new verification link has been sent to the email address
-                    you provided during registration.
+                    {tr('Un nouveau lien de vérification a été envoyé à l’adresse e-mail fournie lors de votre inscription.')}
                 </div>
             )}
 
@@ -23,14 +25,14 @@ export default function VerifyEmail({ status }: { status?: string }) {
                     <>
                         <Button disabled={processing} variant="secondary">
                             {processing && <Spinner />}
-                            Resend verification email
+                            {tr('Renvoyer l’e-mail de vérification')}
                         </Button>
 
                         <TextLink
                             href={logout()}
                             className="mx-auto block text-sm"
                         >
-                            Log out
+                            {tr('Se déconnecter')}
                         </TextLink>
                     </>
                 )}
@@ -40,7 +42,7 @@ export default function VerifyEmail({ status }: { status?: string }) {
 }
 
 VerifyEmail.layout = {
-    title: 'Email verification',
+    title: 'Vérification de l’e-mail',
     description:
-        'Please verify your email address by clicking on the link we just emailed to you.',
+        'Veuillez vérifier votre adresse e-mail en cliquant sur le lien que nous venons de vous envoyer.',
 };

@@ -9,45 +9,30 @@ import { edit as editAppearance } from '@/routes/appearance';
 import { edit } from '@/routes/profile';
 import { edit as editSecurity } from '@/routes/security';
 import type { NavItem } from '@/types';
-
-const sidebarNavItems: NavItem[] = [
-    {
-        title: 'Profil',
-        href: edit(),
-        icon: null,
-    },
-    {
-        title: 'Sécurité',
-        href: editSecurity(),
-        icon: null,
-    },
-    {
-        title: 'Apparence',
-        href: editAppearance(),
-        icon: null,
-    },
-    {
-        title: 'Préférences',
-        href: '/settings/preferences',
-        icon: null,
-    },
-];
+import { useI18n } from '@/lib/i18n';
 
 export default function SettingsLayout({ children }: PropsWithChildren) {
     const { isCurrentOrParentUrl } = useCurrentUrl();
+    const { t } = useI18n();
+    const sidebarNavItems: NavItem[] = [
+        { title: t('profile'), href: edit(), icon: null },
+        { title: t('security'), href: editSecurity(), icon: null },
+        { title: t('appearance'), href: editAppearance(), icon: null },
+        { title: t('preferences'), href: '/settings/preferences', icon: null },
+    ];
 
     return (
         <div className="px-4 py-6">
             <Heading
-                title="Paramètres"
-                description="Gérez votre profil, votre sécurité et vos préférences."
+                title={t('settings')}
+                description={t('settingsDescription')}
             />
 
             <div className="flex flex-col lg:flex-row lg:space-x-12">
                 <aside className="w-full max-w-xl lg:w-48">
                     <nav
                         className="flex flex-col space-y-1 space-x-0"
-                        aria-label="Paramètres"
+                        aria-label={t('settings')}
                     >
                         {sidebarNavItems.map((item, index) => (
                             <Button

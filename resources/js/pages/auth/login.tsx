@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { store } from '@/routes/login';
 import { request } from '@/routes/password';
+import { useI18n } from '@/lib/i18n';
 
 type Props = {
     status?: string;
@@ -17,9 +18,11 @@ type Props = {
 };
 
 export default function Login({ status, canResetPassword }: Props) {
+    const { tr } = useI18n();
+
     return (
         <>
-            <Head title="Connexion" />
+            <Head title={tr('Connexion')} />
 
             <PasskeyVerify />
 
@@ -33,7 +36,7 @@ export default function Login({ status, canResetPassword }: Props) {
                         <div className="grid gap-6">
                             <div className="grid gap-2">
                                 <Label htmlFor="email">
-                                    E-mail ou numéro de téléphone
+                                    {tr('E-mail ou numéro de téléphone')}
                                 </Label>
                                 <Input
                                     id="email"
@@ -51,7 +54,7 @@ export default function Login({ status, canResetPassword }: Props) {
                             <div className="grid gap-2">
                                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                                     <Label htmlFor="password">
-                                        Mot de passe
+                                    {tr('Mot de passe')}
                                     </Label>
                                     {canResetPassword && (
                                         <TextLink
@@ -59,7 +62,7 @@ export default function Login({ status, canResetPassword }: Props) {
                                             className="ml-auto text-xs font-semibold text-[#245c3e] sm:text-sm dark:text-[#245c3e]"
                                             tabIndex={5}
                                         >
-                                            Mot de passe oublié&nbsp;?
+                                            {tr('Mot de passe oublié ?')}
                                         </TextLink>
                                     )}
                                 </div>
@@ -69,7 +72,7 @@ export default function Login({ status, canResetPassword }: Props) {
                                     required
                                     tabIndex={2}
                                     autoComplete="current-password"
-                                    placeholder="Votre mot de passe"
+                                    placeholder={tr('Votre mot de passe')}
                                 />
                                 <InputError message={errors.password} />
                             </div>
@@ -81,7 +84,7 @@ export default function Login({ status, canResetPassword }: Props) {
                                     tabIndex={3}
                                 />
                                 <Label htmlFor="remember">
-                                    Rester connecté
+                                    {tr('Rester connecté')}
                                 </Label>
                             </div>
 
@@ -93,7 +96,7 @@ export default function Login({ status, canResetPassword }: Props) {
                                 data-test="login-button"
                             >
                                 {processing && <Spinner />}
-                                Se connecter
+                                {tr('Se connecter')}
                             </Button>
                         </div>
                     </>

@@ -33,6 +33,7 @@ class OperationController extends Controller
                 'site:id,code,nom',
                 'departement:id,code,nom',
                 'motif:id,code,libelle,recevable',
+                'intervenants.user:id,name',
                 'evenements' => fn ($query) => $query->latest('created_at')->limit(3),
             ])
             ->where('est_modele', false)
@@ -59,7 +60,7 @@ class OperationController extends Controller
             'sites' => Site::query()->where('actif', true)->orderBy('code')->get(['id', 'code', 'nom']),
             'departements' => Departement::query()->where('actif', true)->orderBy('code')->get(['id', 'code', 'nom']),
             'motifs' => MotifNonExecution::query()->where('actif', true)->orderBy('ordre')->orderBy('libelle')->get(),
-            'users' => User::query()->where('actif', true)->orderBy('name')->get(['id', 'name']),
+            'users' => User::query()->where('actif', true)->orderBy('name')->get(['id', 'name', 'niveau_hierarchie']),
             'audit' => JournalAudit::query()
                 ->with('auteur:id,name')
                 ->latest('created_at')
@@ -102,6 +103,10 @@ class OperationController extends Controller
             'departement_id' => ['nullable', 'integer', 'exists:departements,id'],
             'lieu' => ['nullable', 'string', 'max:180'],
             'responsable_id' => ['nullable', 'integer', 'exists:users,id'],
+            'appui_ids' => ['array'],
+            'appui_ids.*' => ['integer', 'distinct', 'exists:users,id'],
+            'informe_ids' => ['array'],
+            'informe_ids.*' => ['integer', 'distinct', 'exists:users,id'],
             'date_due' => ['required', 'date_format:Y-m-d'],
             'heure_due' => ['nullable', 'date_format:H:i'],
             'priorite' => ['required', Rule::enum(Priorite::class)],
@@ -140,6 +145,24 @@ class OperationController extends Controller
         $service->justifier($tache, $motif, $data['motif_precision'] ?? null);
 
         return back()->with('success', 'Non-exécution justifiée.');
+    }
+
+    public function validateDde(Request $request, Tache $tache, TacheService $service): RedirectResponse
+    {
+        $this->ensureAdmin($request);
+        $data = $request->validate(['observation' => ['nullable', 'string', 'max:180']]);
+        $service->validerDossierDisciplinaire($tache, $request->user(), $data['observation'] ?? null);
+
+        return back()->with('success', 'Dossier disciplinaire confirmé et référencé.');
+    }
+
+    public function requalifyDde(Request $request, Tache $tache, TacheService $service): RedirectResponse
+    {
+        $this->ensureAdmin($request);
+        $data = $request->validate(['observation' => ['required', 'string', 'max:180']]);
+        $service->requalifierDossierDisciplinaire($tache, $request->user(), $data['observation']);
+
+        return back()->with('success', 'Dossier requalifié en justification recevable.');
     }
 
     public function close(Request $request, TacheService $service): RedirectResponse

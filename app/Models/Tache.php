@@ -52,6 +52,12 @@ class Tache extends Model
         'escalade_niveau',
         'escalade_le',
         'dde_reference',
+        'dde_statut',
+        'dde_valide_par_id',
+        'dde_valide_le',
+        'dde_observation',
+        'plantation_id',
+        'plan_ligne_id',
     ];
 
     protected function casts(): array
@@ -64,6 +70,7 @@ class Tache extends Model
             'fait_le' => 'datetime',
             'justifie_le' => 'datetime',
             'escalade_le' => 'datetime',
+            'dde_valide_le' => 'datetime',
             'est_modele' => 'boolean',
             'motif_valide' => 'boolean',
             'quantite' => 'decimal:4',
@@ -110,6 +117,30 @@ class Tache extends Model
     public function evenements(): HasMany
     {
         return $this->hasMany(TacheEvenement::class)->orderBy('created_at');
+    }
+
+    /** @return HasMany<TacheIntervenant, $this> */
+    public function intervenants(): HasMany
+    {
+        return $this->hasMany(TacheIntervenant::class);
+    }
+
+    /** @return BelongsTo<User, $this> */
+    public function ddeValidePar(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'dde_valide_par_id');
+    }
+
+    /** @return BelongsTo<Plantation, $this> */
+    public function plantation(): BelongsTo
+    {
+        return $this->belongsTo(Plantation::class);
+    }
+
+    /** @return BelongsTo<PlanLigne, $this> */
+    public function planLigne(): BelongsTo
+    {
+        return $this->belongsTo(PlanLigne::class);
     }
 
     /** @param Builder<Tache> $query */

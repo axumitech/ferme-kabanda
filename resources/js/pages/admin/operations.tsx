@@ -14,9 +14,10 @@ import {
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { AdminLayout } from './AdminLayout';
+import { useI18n } from '@/lib/i18n';
 
 type Option = { value: string; label: string };
-type User = { id: number; name: string };
+type User = { id: number; name: string; niveau_hierarchie?: number };
 type Site = { id: number; code: string; nom: string };
 type Departement = { id: number; code: string; nom: string };
 type Motif = {
@@ -44,7 +45,9 @@ type Task = {
     commentaire?: string | null;
     motif_precision?: string | null;
     dde_reference?: string | null;
+    dde_statut?: string | null;
     responsable?: User | null;
+    intervenants?: Array<{ id: number; role: string; user: User }>;
     createur?: User | null;
     site?: Site | null;
     departement?: Departement | null;
@@ -81,22 +84,6 @@ type Props = {
 
 const today = new Date().toISOString().slice(0, 10);
 
-const statusLabel: Record<string, string> = {
-    a_faire: 'À faire',
-    faite: 'Faite',
-    non_faite_justifiee: 'Justifiée',
-    non_faite_non_justifiee: 'Non recevable',
-    reportee: 'Reportée',
-    annulee: 'Annulée',
-};
-
-const priorityLabel: Record<string, string> = {
-    urgente: 'Urgente',
-    elevee: 'Élevée',
-    normale: 'Normale',
-    planifiee: 'Planifiée',
-};
-
 const badgeClass = (task: Task) => {
     if (task.statut === 'faite') return 'admin-badge admin-badge--green';
     if (task.statut === 'non_faite_non_justifiee') return 'admin-badge admin-badge--red';
@@ -115,6 +102,9 @@ export default function OperationsAdmin({
     stats,
     options,
 }: Props) {
+    const { tr } = useI18n();
+    const statusLabel: Record<string, string> = { a_faire: tr('À faire'), faite: tr('Faite'), non_faite_justifiee: tr('Justifiée'), non_faite_non_justifiee: tr('Non recevable'), reportee: tr('Reportée'), annulee: tr('Annulée') };
+    const priorityLabel: Record<string, string> = { urgente: tr('Urgente'), elevee: tr('Élevée'), normale: tr('Normale'), planifiee: tr('Planifiée') };
     const [query, setQuery] = useState('');
     const [status, setStatus] = useState('open');
     const [selected, setSelected] = useState<Task | null>(tasks[0] ?? null);
@@ -130,6 +120,8 @@ export default function OperationsAdmin({
         departement_id: departements[0]?.id ? String(departements[0].id) : '',
         lieu: '',
         responsable_id: users[0]?.id ? String(users[0].id) : '',
+        appui_ids: [] as string[],
+        informe_ids: [] as string[],
         date_due: today,
         heure_due: '',
         priorite: 'normale',
@@ -145,6 +137,7 @@ export default function OperationsAdmin({
         date: today,
         observation: '',
     });
+    const ddeForm = useForm({ observation: '' });
 
     const filtered = useMemo(
         () =>
@@ -198,6 +191,17 @@ export default function OperationsAdmin({
         closeForm.post('/admin/operations/close-day', { preserveScroll: true });
     };
 
+    const validateDde = () => {
+        if (!selected) return;
+        ddeForm.post(`/admin/operations/tasks/${selected.id}/dde/validate`, { preserveScroll: true });
+    };
+
+    const requalifyDde = (event: React.FormEvent) => {
+        event.preventDefault();
+        if (!selected) return;
+        ddeForm.post(`/admin/operations/tasks/${selected.id}/dde/requalify`, { preserveScroll: true });
+    };
+
     const reloadSeededReferences = () => {
         router.reload({ only: ['sites', 'departements', 'motifs', 'users'] });
     };
@@ -207,16 +211,16 @@ export default function OperationsAdmin({
             title="Opérations"
             subtitle="Pilotez les tâches, les justifications, les clôtures et la traçabilité du socle."
         >
-            <Head title="Opérations" />
+            <Head title={tr('Opérations')} />
 
             <div className="admin-animate-in">
                 <div className="admin-stats-grid">
                     {[
-                        { icon: CalendarCheck, label: "Tâches aujourd'hui", value: stats.today },
-                        { icon: ClipboardCheck, label: 'Ouvertes', value: stats.open },
-                        { icon: AlertTriangle, label: 'En retard', value: stats.late, danger: stats.late > 0 },
-                        { icon: Check, label: 'Faites', value: stats.done },
-                        { icon: ShieldCheck, label: 'Dossiers RH', value: stats.disciplinary, danger: stats.disciplinary > 0 },
+                        { icon: CalendarCheck, label: tr("Tâches aujourd'hui"), value: stats.today },
+                        { icon: ClipboardCheck, label: tr('Ouvertes'), value: stats.open },
+                        { icon: AlertTriangle, label: tr('En retard'), value: stats.late, danger: stats.late > 0 },
+                        { icon: Check, label: tr('Faites'), value: stats.done },
+                        { icon: ShieldCheck, label: tr('Dossiers RH'), value: stats.disciplinary, danger: stats.disciplinary > 0 },
                     ].map(({ icon: Icon, label, value, danger }) => (
                         <div key={label} className={`admin-stat-card${danger ? ' admin-stat-card--danger' : ''}`}>
                             <div className="admin-stat-header">
@@ -232,14 +236,14 @@ export default function OperationsAdmin({
                     <div className="admin-form-panel mb-6 border-amber-200 bg-amber-50/60">
                         <div className="flex flex-wrap items-start justify-between gap-3">
                             <div>
-                                <div className="admin-section-eyebrow">Configuration à compléter</div>
-                                <h2 className="admin-section-title text-[20px]">Certaines actions ont besoin des références du socle.</h2>
+                                <div className="admin-section-eyebrow">{tr('Configuration à compléter')}</div>
+                                <h2 className="admin-section-title text-[20px]">{tr('Certaines actions ont besoin des références du socle.')}</h2>
                                 <p className="admin-section-desc mb-0">
-                                    Vérifiez les sites, départements et motifs avant de clôturer une journée ou justifier une tâche.
+                                    {tr('Vérifiez les sites, départements et motifs avant de clôturer une journée ou justifier une tâche.')}
                                 </p>
                             </div>
                             <button type="button" className="admin-btn-secondary" onClick={reloadSeededReferences}>
-                                Recharger
+                                {tr('Recharger')}
                             </button>
                         </div>
                     </div>
@@ -291,6 +295,18 @@ export default function OperationsAdmin({
                                 <label>Responsable</label>
                                 <select value={createForm.data.responsable_id} onChange={(event) => createForm.setData('responsable_id', event.target.value)}>
                                     <option value="">Non assignée</option>
+                                    {users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
+                                </select>
+                            </div>
+                            <div className="admin-field">
+                                <label>Appuis (co-exécutants)</label>
+                                <select multiple value={createForm.data.appui_ids} onChange={(event) => createForm.setData('appui_ids', Array.from(event.target.selectedOptions, (option) => option.value))}>
+                                    {users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
+                                </select>
+                            </div>
+                            <div className="admin-field">
+                                <label>Informés (lecture)</label>
+                                <select multiple value={createForm.data.informe_ids} onChange={(event) => createForm.setData('informe_ids', Array.from(event.target.selectedOptions, (option) => option.value))}>
                                     {users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
                                 </select>
                             </div>
@@ -376,6 +392,7 @@ export default function OperationsAdmin({
                                             </td>
                                             <td>
                                                 {task.responsable?.name ?? 'Non assignée'}
+                                                {task.intervenants?.filter((intervenant) => intervenant.role !== 'responsable').length ? <span className="admin-cell-sub">+ {task.intervenants.filter((intervenant) => intervenant.role !== 'responsable').map((intervenant) => intervenant.user.name).join(', ')}</span> : null}
                                                 <span className="admin-cell-sub">{task.site?.code ?? 'Site libre'} · {task.departement?.code ?? 'Département libre'}</span>
                                             </td>
                                             <td>
@@ -385,6 +402,7 @@ export default function OperationsAdmin({
                                             <td>
                                                 <span className={badgeClass(task)}>{statusLabel[task.statut] ?? task.statut}</span>
                                                 {task.dde_reference && <span className="admin-cell-sub">DDE {task.dde_reference}</span>}
+                                                {task.dde_statut === 'a_valider' && <span className="admin-cell-sub">DDE à valider</span>}
                                             </td>
                                             <td>
                                                 <button type="button" className="admin-btn-secondary" onClick={() => setSelected(task)}>
@@ -467,6 +485,20 @@ export default function OperationsAdmin({
                                                         Ajoutez d’abord les motifs de non-exécution pour pouvoir justifier une tâche.
                                                     </div>
                                                 )}
+                                            </div>
+                                        )}
+
+                                        {selected.dde_statut === 'a_valider' && (
+                                            <div className="mt-5 rounded-lg border border-red-200 bg-red-50 p-4">
+                                                <div className="text-[13px] font-semibold text-red-900">Dossier disciplinaire à valider</div>
+                                                <p className="mt-1 text-[13px] text-red-800">Un supérieur distinct de l’intéressé doit confirmer ou requalifier ce motif.</p>
+                                                <div className="mt-3 flex gap-2">
+                                                    <button type="button" className="admin-btn-submit" onClick={validateDde} disabled={ddeForm.processing}>Confirmer la DDE</button>
+                                                </div>
+                                                <form onSubmit={requalifyDde} className="mt-3 flex gap-2">
+                                                    <input className="min-w-0 flex-1 rounded-md border border-red-200 px-3 py-2 text-sm" value={ddeForm.data.observation} onChange={(event) => ddeForm.setData('observation', event.target.value)} placeholder="Motif de requalification" required />
+                                                    <button type="submit" className="admin-btn-secondary" disabled={ddeForm.processing}>Requalifier</button>
+                                                </form>
                                             </div>
                                         )}
 

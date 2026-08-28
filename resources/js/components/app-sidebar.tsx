@@ -13,33 +13,22 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import type { NavItem } from '@/types';
-
-const mainNavItems: NavItem[] = [
-    {
-        title: 'Cockpit',
-        href: '/dashboard',
-        icon: LayoutGrid,
-    },
-    {
-        title: 'Ma journée',
-        href: '/journee',
-        icon: ClipboardCheck,
-    },
-    {
-        title: 'Terrain',
-        href: '/terrain',
-        icon: Sprout,
-    },
-];
+import { useI18n } from '@/lib/i18n';
 
 export function AppSidebar() {
     const { auth } = usePage().props;
+    const { t } = useI18n();
     const user = auth.user as { is_admin?: boolean } | null;
+    const mainNavItems: NavItem[] = [
+        { title: t('cockpit'), href: '/dashboard', icon: LayoutGrid },
+        { title: t('myDay'), href: '/journee', icon: ClipboardCheck },
+        { title: t('field'), href: '/terrain', icon: Sprout },
+    ];
     const navItems = user?.is_admin
         ? [
               ...mainNavItems,
               {
-                  title: 'Administration',
+                  title: t('administration'),
                   href: '/admin/operations',
                   icon: Settings,
               },

@@ -8,6 +8,8 @@ use App\Enums\StatutTache;
 use App\Models\ClotureJournaliere;
 use App\Models\MotifNonExecution;
 use App\Models\Tache;
+use App\Models\TacheIntervenant;
+use App\Models\User;
 use App\Support\Numerotation;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
@@ -18,6 +20,9 @@ class TacheService
     /** @param array<string, mixed> $donnees */
     public function creer(array $donnees, ?Model $origine = null): Tache
     {
+        $appuiIds = $donnees['appui_ids'] ?? [];
+        $informeIds = $donnees['informe_ids'] ?? [];
+        unset($donnees['appui_ids'], $donnees['informe_ids']);
         $cle = [
             'source' => $donnees['source'] instanceof SourceTache ? $donnees['source']->value : $donnees['source'],
             'titre' => $donnees['titre'],
@@ -44,6 +49,7 @@ class TacheService
         ], $donnees));
 
         $tache->journaliserEvenement('creee', "Tâche créée - {$tache->titre}");
+        $this->synchroniserIntervenants($tache, $appuiIds, $informeIds);
 
         return $tache;
     }
@@ -99,23 +105,62 @@ class TacheService
 
     public function ouvrirDossierDisciplinaire(Tache $tache, MotifNonExecution $motif): void
     {
-        if ($tache->dde_reference) {
+        if ($tache->dde_statut) {
             return;
         }
 
-        $reference = Numerotation::suivant('RH');
-
         $tache->update([
-            'dde_reference' => $reference,
-            'escalade_niveau' => 3,
-            'escalade_le' => now(),
+            'dde_statut' => 'a_valider',
         ]);
 
         $tache->journaliserEvenement(
-            'escaladee',
-            "Demande d'explication ouverte sous la référence {$reference}".($motif->article_reglement ? " - {$motif->article_reglement}" : ''),
-            ['reference' => $reference, 'article' => $motif->article_reglement],
+            'dde_a_valider',
+            'Motif non recevable à valider par un supérieur'.($motif->article_reglement ? " - {$motif->article_reglement}" : ''),
+            ['article' => $motif->article_reglement],
         );
+    }
+
+    public function validerDossierDisciplinaire(Tache $tache, User $validateur, ?string $observation = null): Tache
+    {
+        $this->verifierValidateurDde($tache, $validateur);
+
+        if ($tache->dde_statut !== 'a_valider') {
+            throw new RuntimeException('Ce dossier disciplinaire n’est pas en attente de validation.');
+        }
+
+        $reference = Numerotation::suivant('RH');
+        $tache->update([
+            'dde_reference' => $reference,
+            'dde_statut' => 'confirme',
+            'dde_valide_par_id' => $validateur->id,
+            'dde_valide_le' => now(),
+            'dde_observation' => $observation,
+            'escalade_niveau' => 3,
+            'escalade_le' => now(),
+        ]);
+        $tache->journaliserEvenement('dde_confirmee', "Demande d'explication confirmée sous la référence {$reference}", ['reference' => $reference]);
+
+        return $tache;
+    }
+
+    public function requalifierDossierDisciplinaire(Tache $tache, User $validateur, string $observation): Tache
+    {
+        $this->verifierValidateurDde($tache, $validateur);
+
+        if ($tache->dde_statut !== 'a_valider' || blank($observation)) {
+            throw new RuntimeException('Une observation est obligatoire pour requalifier un dossier en attente.');
+        }
+
+        $tache->update([
+            'statut' => StatutTache::NonFaiteJustifiee,
+            'dde_statut' => 'requalifie',
+            'dde_valide_par_id' => $validateur->id,
+            'dde_valide_le' => now(),
+            'dde_observation' => $observation,
+        ]);
+        $tache->journaliserEvenement('dde_requalifiee', "Dossier requalifié : {$observation}");
+
+        return $tache;
     }
 
     public function cloturer(int $siteId, int $departementId, CarbonInterface $date, ?string $observation = null): ClotureJournaliere
@@ -172,6 +217,40 @@ class TacheService
             throw new RuntimeException(
                 'JOURNÉE CLÔTURÉE - cette journée est verrouillée. Seule la Direction peut la rouvrir, et la réouverture est journalisée.',
             );
+        }
+    }
+
+    /**
+     * @param  array<int, int|string>  $appuiIds
+     * @param  array<int, int|string>  $informeIds
+     */
+    private function synchroniserIntervenants(Tache $tache, array $appuiIds, array $informeIds): void
+    {
+        $roles = collect();
+        foreach ($appuiIds as $id) {
+            if ($id) {
+                $roles->put((int) $id, TacheIntervenant::APPUI);
+            }
+        }
+        foreach ($informeIds as $id) {
+            if ($id) {
+                $roles->put((int) $id, TacheIntervenant::INFORME);
+            }
+        }
+
+        if ($tache->responsable_id) {
+            $roles->put((int) $tache->responsable_id, TacheIntervenant::RESPONSABLE);
+        }
+
+        foreach ($roles as $userId => $role) {
+            $tache->intervenants()->updateOrCreate(['user_id' => $userId], ['role' => $role]);
+        }
+    }
+
+    private function verifierValidateurDde(Tache $tache, User $validateur): void
+    {
+        if ($validateur->niveau_hierarchie > 3 || in_array($validateur->id, [$tache->responsable_id, $tache->justifie_par_id], true)) {
+            throw new RuntimeException('VALIDATION DDE REFUSÉE — seul un supérieur (niveaux 1 à 3), distinct de l’intéressé et du justificateur, peut décider.');
         }
     }
 

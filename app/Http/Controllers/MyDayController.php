@@ -20,10 +20,11 @@ class MyDayController extends Controller
         $user = $request->user();
 
         $tasks = Tache::query()
-            ->with(['site:id,code,nom', 'departement:id,code,nom', 'motif:id,code,libelle,recevable', 'evenements'])
+            ->with(['site:id,code,nom', 'departement:id,code,nom', 'motif:id,code,libelle,recevable', 'intervenants.user:id,name', 'evenements'])
             ->where('est_modele', false)
             ->where(function ($query) use ($user): void {
                 $query->where('responsable_id', $user?->id)
+                    ->orWhereHas('intervenants', fn ($intervenants) => $intervenants->where('user_id', $user?->id))
                     ->orWhereNull('responsable_id');
             })
             ->whereDate('date_due', '<=', today())
@@ -97,6 +98,6 @@ class MyDayController extends Controller
     {
         $user = $request->user();
 
-        return $user !== null && ($user->is_admin || $tache->responsable_id === $user->id || $tache->responsable_id === null);
+        return $user !== null && ($user->is_admin || $tache->responsable_id === $user->id || $tache->intervenants()->where('user_id', $user->id)->exists() || $tache->responsable_id === null);
     }
 }

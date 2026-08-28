@@ -1,4 +1,5 @@
 import AppLayout from '@/layouts/app-layout';
+import { useI18n } from '@/lib/i18n';
 import { Head, Link, usePage } from '@inertiajs/react';
 import {
     AlertTriangle,
@@ -82,21 +83,22 @@ export default function Dashboard({
     mapFeatures,
     referencesCount,
 }: Props) {
+    const { tr, t } = useI18n();
     const { auth } = usePage().props;
     const user = auth.user as { is_admin?: boolean } | null;
     const isAdmin = !!user?.is_admin;
     const cards = [
-        { label: "Aujourd'hui", value: stats.tasksToday, icon: CalendarCheck, href: '/journee' },
-        { label: 'Ouvertes', value: stats.openTasks, icon: ClipboardCheck, href: '/journee' },
-        { label: 'En retard', value: stats.lateTasks, icon: AlertTriangle, href: isAdmin ? '/admin/operations' : '/journee', danger: stats.lateTasks > 0 },
-        { label: 'Faites ce jour', value: stats.doneToday, icon: CheckCircle2, href: '/journee' },
-        { label: 'Stock bas', value: stats.lowInventory + stats.lowProducts, icon: Boxes, href: isAdmin ? '/admin/inventory' : '/terrain', danger: stats.lowInventory + stats.lowProducts > 0 },
-        { label: 'Clôtures', value: stats.closedToday, icon: Lock, href: isAdmin ? '/admin/operations' : '/journee' },
+        { label: tr("Aujourd'hui"), value: stats.tasksToday, icon: CalendarCheck, href: '/journee' },
+        { label: tr('Ouvertes'), value: stats.openTasks, icon: ClipboardCheck, href: '/journee' },
+        { label: tr('En retard'), value: stats.lateTasks, icon: AlertTriangle, href: isAdmin ? '/admin/operations' : '/journee', danger: stats.lateTasks > 0 },
+        { label: tr('Faites ce jour'), value: stats.doneToday, icon: CheckCircle2, href: '/journee' },
+        { label: tr('Stock bas'), value: stats.lowInventory + stats.lowProducts, icon: Boxes, href: isAdmin ? '/admin/inventory' : '/terrain', danger: stats.lowInventory + stats.lowProducts > 0 },
+        { label: tr('Clôtures'), value: stats.closedToday, icon: Lock, href: isAdmin ? '/admin/operations' : '/journee' },
     ];
 
     return (
         <AppLayout>
-            <Head title="Cockpit ferme" />
+            <Head title={tr('Cockpit ferme')} />
             <main className="min-h-screen dashboard-gradient-bg px-4 py-8 text-[#17352a] sm:px-6 lg:px-8 animate-fade-in-up">
                 <div className="mx-auto max-w-7xl space-y-8">
                     <section className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(300px,.9fr)]">
@@ -104,19 +106,19 @@ export default function Dashboard({
                             <div className="flex flex-wrap items-start justify-between gap-6">
                                 <div>
                                     <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#a16f26]">Ferme Kabanda Naweza</p>
-                                    <h1 className="mt-2 text-2xl font-bold tracking-tight text-[#17352a] sm:text-3xl">Cockpit opérationnel</h1>
+                                    <h1 className="mt-2 text-2xl font-bold tracking-tight text-[#17352a] sm:text-3xl">{tr('Cockpit opérationnel')}</h1>
                                     <p className="mt-2 max-w-2xl text-sm leading-6 text-[#637069]">
                                         {isAdmin
-                                            ? 'Pilotez les tâches, stocks, rapports et clôtures au même endroit.'
-                                            : 'Retrouvez vos tâches du jour, les alertes utiles et les informations terrain sans passer par l’administration.'}
+                                            ? tr('Pilotez les tâches, stocks, rapports et clôtures au même endroit.')
+                                            : tr('Retrouvez vos tâches du jour, les alertes utiles et les informations terrain sans passer par l’administration.')}
                                     </p>
                                 </div>
                                 <div className="flex flex-wrap gap-3">
                                     <Link href="/journee" className="hover-lift inline-flex h-11 items-center gap-2 rounded-xl bg-[#174a31] px-5 text-sm font-semibold text-white shadow-md">
-                                        <ClipboardCheck size={18} /> Ma journée
+                                        <ClipboardCheck size={18} /> {t('myDay')}
                                     </Link>
                                     <Link href="/terrain" className="hover-lift inline-flex h-11 items-center gap-2 rounded-xl border border-[#ded8ca] bg-[#fbfaf7] px-5 text-sm font-semibold text-[#425047]">
-                                        <Sprout size={18} /> Terrain
+                                        <Sprout size={18} /> {t('field')}
                                     </Link>
                                     {isAdmin && (
                                         <Link href="/admin/operations" className="hover-lift inline-flex h-11 items-center gap-2 rounded-xl border border-[#ded8ca] bg-[#fbfaf7] px-5 text-sm font-semibold text-[#425047]">
@@ -127,19 +129,19 @@ export default function Dashboard({
                             </div>
                         </div>
                         <div className="rounded-[20px] bg-glass-dark p-6 md:p-8 text-white shadow-lg hover-lift">
-                            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#d8a84e]">État du socle</p>
+                            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#d8a84e]">{tr('État du socle')}</p>
                             <div className="mt-6 grid grid-cols-3 gap-4 text-center">
                                 <div>
                                     <div className="text-2xl font-bold">{referencesCount}</div>
-                                    <div className="text-xs text-[#c9d8d0]">références</div>
+                                    <div className="text-xs text-[#c9d8d0]">{tr('références')}</div>
                                 </div>
                                 <div>
                                     <div className="text-2xl font-bold">{stats.reportsToday}</div>
-                                    <div className="text-xs text-[#c9d8d0]">rapports</div>
+                                    <div className="text-xs text-[#c9d8d0]">{tr('rapports')}</div>
                                 </div>
                                 <div>
                                     <div className="text-2xl font-bold">{mapFeatures.length}</div>
-                                    <div className="text-xs text-[#c9d8d0]">zones</div>
+                                    <div className="text-xs text-[#c9d8d0]">{tr('zones')}</div>
                                 </div>
                             </div>
                         </div>
@@ -183,14 +185,14 @@ export default function Dashboard({
                     <section className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(300px,.8fr)]">
                         <div className="dashboard-stat-card">
                             <div className="border-b border-[#e7e1d4] px-6 py-5">
-                                <h2 className="text-lg font-bold tracking-tight text-[#17352a]">File opérationnelle</h2>
+                                <h2 className="text-lg font-bold tracking-tight text-[#17352a]">{tr('File opérationnelle')}</h2>
                             </div>
                             <div className="divide-y divide-[#eee8dd]">
                                 {tasks.map((task) => (
                                     <div key={task.id} className="grid gap-3 px-5 py-4 md:grid-cols-[1fr_auto]">
                                         <div>
                                             <div className="font-semibold">{task.titre}</div>
-                                            <div className="mt-1 text-sm text-[#637069]">{task.reference} · {task.site?.code ?? 'Site libre'} · {task.departement?.code ?? 'Département libre'} · {task.responsable?.name ?? 'Non assignée'}</div>
+                                            <div className="mt-1 text-sm text-[#637069]">{task.reference} · {task.site?.code ?? tr('Site libre')} · {task.departement?.code ?? tr('Département libre')} · {task.responsable?.name ?? tr('Non assignée')}</div>
                                         </div>
                                         <div className="flex items-center gap-2 md:justify-end">
                                             <span className={`rounded-full px-2.5 py-1 text-xs font-bold ring-1 ${statusClass(task)}`}>{task.statut.replaceAll('_', ' ')}</span>
@@ -198,38 +200,38 @@ export default function Dashboard({
                                         </div>
                                     </div>
                                 ))}
-                                {tasks.length === 0 && <div className="px-5 py-10 text-center text-sm text-[#7a857e]">Aucune tâche opérationnelle.</div>}
+                                {tasks.length === 0 && <div className="px-5 py-10 text-center text-sm text-[#7a857e]">{tr('Aucune tâche opérationnelle.')}</div>}
                             </div>
                         </div>
 
                         <div className="space-y-6">
                             <div className="dashboard-stat-card">
                                 <div className="border-b border-[#e7e1d4] px-6 py-5">
-                                    <h2 className="text-lg font-bold tracking-tight text-[#17352a]">Alertes magasin</h2>
+                                    <h2 className="text-lg font-bold tracking-tight text-[#17352a]">{tr('Alertes magasin')}</h2>
                                 </div>
                                 <div className="divide-y divide-[#eee8dd]">
                                     {lowInventoryItems.map((item) => (
                                         <div key={item.id} className="px-5 py-4">
                                             <div className="font-semibold">{item.name}</div>
-                                            <div className="mt-1 text-sm text-[#637069]">{item.code} · {item.quantity_on_hand} {item.unit} · seuil {item.minimum_quantity}</div>
+                                            <div className="mt-1 text-sm text-[#637069]">{item.code} · {item.quantity_on_hand} {item.unit} · {tr('seuil')} {item.minimum_quantity}</div>
                                         </div>
                                     ))}
-                                    {lowInventoryItems.length === 0 && <div className="px-5 py-8 text-center text-sm text-[#7a857e]">Aucune alerte stock.</div>}
+                                    {lowInventoryItems.length === 0 && <div className="px-5 py-8 text-center text-sm text-[#7a857e]">{tr('Aucune alerte stock.')}</div>}
                                 </div>
                             </div>
 
                             <div className="dashboard-stat-card">
                                 <div className="border-b border-[#e7e1d4] px-6 py-5">
-                                    <h2 className="text-lg font-bold tracking-tight text-[#17352a]">Clôtures récentes</h2>
+                                    <h2 className="text-lg font-bold tracking-tight text-[#17352a]">{tr('Clôtures récentes')}</h2>
                                 </div>
                                 <div className="divide-y divide-[#eee8dd]">
                                     {closures.map((closure) => (
                                         <div key={closure.id} className="px-5 py-4">
                                             <div className="font-semibold">{closure.site?.code} · {closure.departement?.code} · {closure.date}</div>
-                                            <div className="mt-1 text-sm text-[#637069]">{closure.faites}/{closure.dues} faites · {closure.justifiees} justifiées · {closure.non_justifiees} RH</div>
+                                            <div className="mt-1 text-sm text-[#637069]">{closure.faites}/{closure.dues} {tr('faites')} · {closure.justifiees} {tr('justifiées')} · {closure.non_justifiees} RH</div>
                                         </div>
                                     ))}
-                                    {closures.length === 0 && <div className="px-5 py-8 text-center text-sm text-[#7a857e]">Aucune clôture récente.</div>}
+                                    {closures.length === 0 && <div className="px-5 py-8 text-center text-sm text-[#7a857e]">{tr('Aucune clôture récente.')}</div>}
                                 </div>
                             </div>
                         </div>
@@ -238,7 +240,7 @@ export default function Dashboard({
                     <section className="dashboard-stat-card">
                         <div className="flex items-center gap-3 border-b border-[#e7e1d4] px-6 py-5 text-[#17352a]">
                             <Map size={20} />
-                            <h2 className="text-lg font-bold tracking-tight text-[#17352a]">Zones actives</h2>
+                            <h2 className="text-lg font-bold tracking-tight text-[#17352a]">{tr('Zones actives')}</h2>
                         </div>
                         <div className="grid gap-3 p-5 md:grid-cols-2 xl:grid-cols-3">
                             {mapFeatures.map((feature) => (

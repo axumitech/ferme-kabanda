@@ -84,9 +84,38 @@ class OperationalSocleTest extends TestCase
         $service->justifier($tache, $motif);
 
         $this->assertSame(StatutTache::NonFaiteNonJustifiee, $tache->fresh()->statut);
-        $this->assertNotNull($tache->fresh()->dde_reference);
-        $this->assertDatabaseHas('tache_evenements', ['tache_id' => $tache->id, 'type' => 'escaladee']);
+        $this->assertNull($tache->fresh()->dde_reference);
+        $this->assertSame('a_valider', $tache->fresh()->dde_statut);
+        $this->assertDatabaseHas('tache_evenements', ['tache_id' => $tache->id, 'type' => 'dde_a_valider']);
         $this->assertDatabaseHas('journal_audit', ['auditable_type' => Tache::class, 'auditable_id' => $tache->id]);
+    }
+
+    public function test_superior_confirms_a_pending_disciplinary_case_and_task_can_have_support_staff(): void
+    {
+        $responsable = User::factory()->create(['niveau_hierarchie' => 4]);
+        $superieur = User::factory()->create(['niveau_hierarchie' => 2]);
+        $appui = User::factory()->create();
+        $motif = MotifNonExecution::query()->create([
+            'code' => 'OUBLI', 'libelle' => 'Oubli', 'recevable' => false,
+            'preuve_requise' => MotifNonExecution::PREUVE_AUCUNE,
+        ]);
+        $service = app(TacheService::class);
+
+        $this->actingAs($responsable);
+        $tache = $service->creer([
+            'source' => SourceTache::Manuelle, 'titre' => 'Suivi parcelle',
+            'responsable_id' => $responsable->id, 'appui_ids' => [$appui->id],
+            'date_due' => today()->toDateString(),
+        ]);
+        $this->assertDatabaseHas('tache_intervenants', ['tache_id' => $tache->id, 'user_id' => $responsable->id, 'role' => 'responsable']);
+        $this->assertDatabaseHas('tache_intervenants', ['tache_id' => $tache->id, 'user_id' => $appui->id, 'role' => 'appui']);
+
+        $service->justifier($tache, $motif);
+        $this->actingAs($superieur);
+        $service->validerDossierDisciplinaire($tache->fresh(), $superieur, 'Absence de justification recevable.');
+
+        $this->assertSame('confirme', $tache->fresh()->dde_statut);
+        $this->assertNotNull($tache->fresh()->dde_reference);
     }
 
     public function test_inventory_movement_and_audit_rows_are_append_only(): void

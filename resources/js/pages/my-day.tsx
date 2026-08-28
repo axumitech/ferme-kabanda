@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { offlineQueue } from '@/lib/offline-queue';
+import { useI18n } from '@/lib/i18n';
 
 type Motif = {
     id: number;
@@ -61,15 +62,6 @@ type Props = {
 
 const today = new Date().toISOString().slice(0, 10);
 
-const statusText: Record<string, string> = {
-    a_faire: 'À faire',
-    faite: 'Faite',
-    non_faite_justifiee: 'Justifiée',
-    non_faite_non_justifiee: 'Non recevable',
-    reportee: 'Reportée',
-    annulee: 'Annulée',
-};
-
 const taskTone = (task: Task) => {
     if (task.statut === 'faite') return 'border-emerald-200 bg-emerald-50/60';
     if (task.statut === 'non_faite_non_justifiee') return 'border-red-200 bg-red-50/70';
@@ -80,6 +72,15 @@ const taskTone = (task: Task) => {
 };
 
 export default function MyDay({ tasks, motifs, closures, stats }: Props) {
+    const { tr } = useI18n();
+    const statusText: Record<string, string> = {
+        a_faire: tr('À faire'),
+        faite: tr('Faite'),
+        non_faite_justifiee: tr('Justifiée'),
+        non_faite_non_justifiee: tr('Non recevable'),
+        reportee: tr('Reportée'),
+        annulee: tr('Annulée'),
+    };
     const [selected, setSelected] = useState<Task | null>(tasks.find((task) => task.statut === 'a_faire') ?? tasks[0] ?? null);
     const [query, setQuery] = useState('');
     const [mode, setMode] = useState<'open' | 'done' | 'all'>('open');
@@ -149,21 +150,21 @@ export default function MyDay({ tasks, motifs, closures, stats }: Props) {
 
     return (
         <>
-            <Head title="Ma journée" />
+            <Head title={tr('Ma journée')} />
             <main className="min-h-screen bg-slate-50 px-4 py-5 text-slate-800 sm:px-6 lg:px-8">
                 <div className="mx-auto max-w-7xl space-y-6">
                     <section className="bg-glass rounded-2xl border border-emerald-950/5 p-6 shadow-sm relative overflow-hidden">
                         <div className="absolute top-0 right-0 p-12 bg-gradient-to-br from-emerald-400/20 to-transparent blur-3xl rounded-full w-96 h-96 -translate-y-1/2 translate-x-1/3 pointer-events-none"></div>
                         <div className="relative flex flex-wrap items-start justify-between gap-4 z-10">
                             <div>
-                                <p className="text-xs font-bold uppercase tracking-widest text-emerald-600">Poste terrain</p>
-                                <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">Ma journée</h1>
-                                <p className="mt-2 text-sm text-slate-500 font-medium">Chaque tâche reçoit une réponse: faite ou justifiée.</p>
+                                <p className="text-xs font-bold uppercase tracking-widest text-emerald-600">{tr('Poste terrain')}</p>
+                                <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">{tr('Ma journée')}</h1>
+                                <p className="mt-2 text-sm text-slate-500 font-medium">{tr('Chaque tâche reçoit une réponse: faite ou justifiée.')}</p>
                             </div>
                             {closures.length > 0 && (
                                 <div className="rounded-xl border border-emerald-200/50 bg-emerald-50/50 backdrop-blur-md px-4 py-3 text-sm font-semibold text-emerald-800 shadow-sm flex items-center">
                                     <Lock className="mr-2.5" size={16} />
-                                    {closures.length} clôture(s) aujourd'hui
+                                    {closures.length} {tr("clôture(s) aujourd'hui")}
                                 </div>
                             )}
                         </div>
@@ -171,10 +172,10 @@ export default function MyDay({ tasks, motifs, closures, stats }: Props) {
 
                     <section className="grid gap-4 md:grid-cols-4">
                         {[
-                            { label: 'Assignées', value: stats.assigned, icon: ClipboardCheck },
-                            { label: 'Ouvertes', value: stats.open, icon: CalendarDays },
-                            { label: 'En retard', value: stats.late, icon: AlertTriangle, danger: stats.late > 0 },
-                            { label: 'Faites', value: stats.doneToday, icon: Check },
+                            { label: tr('Assignées'), value: stats.assigned, icon: ClipboardCheck },
+                            { label: tr('Ouvertes'), value: stats.open, icon: CalendarDays },
+                            { label: tr('En retard'), value: stats.late, icon: AlertTriangle, danger: stats.late > 0 },
+                            { label: tr('Faites'), value: stats.doneToday, icon: Check },
                         ].map(({ label, value, icon: Icon, danger }) => (
                             <div key={label} className={`bg-glass hover-lift rounded-2xl border p-5 shadow-sm transition-all duration-300 ${danger ? 'border-red-200 shadow-red-100' : 'border-emerald-950/5'}`}>
                                 <div className="flex items-start justify-between">
@@ -193,9 +194,9 @@ export default function MyDay({ tasks, motifs, closures, stats }: Props) {
                             <div className="bg-glass rounded-2xl border border-emerald-950/5 p-4 shadow-sm">
                                 <div className="flex flex-wrap gap-2 mb-4">
                                     {[
-                                        ['open', 'À faire'],
-                                        ['done', 'Traitées'],
-                                        ['all', 'Toutes'],
+                                        ['open', tr('À faire')],
+                                        ['done', tr('Traitées')],
+                                        ['all', tr('Toutes')],
                                     ].map(([value, label]) => (
                                         <button
                                             key={value}
@@ -213,7 +214,7 @@ export default function MyDay({ tasks, motifs, closures, stats }: Props) {
                                         value={query}
                                         onChange={(event) => setQuery(event.target.value)}
                                         className="h-12 w-full bg-transparent text-sm font-medium outline-none placeholder:text-slate-400 text-slate-800"
-                                        placeholder="Chercher une tâche..."
+                                        placeholder={tr('Chercher une tâche...')}
                                     />
                                 </div>
                             </div>
@@ -237,13 +238,13 @@ export default function MyDay({ tasks, motifs, closures, stats }: Props) {
                                             </span>
                                         </div>
                                         <div className="mt-4 flex items-center gap-2 text-sm font-medium text-slate-500">
-                                            <MapPin size={16} className="text-slate-400" /> {task.lieu || task.site?.nom || 'Lieu libre'}
+                                            <MapPin size={16} className="text-slate-400" /> {task.lieu || task.site?.nom || tr('Lieu libre')}
                                         </div>
                                     </button>
                                 ))}
                                 {filtered.length === 0 && (
                                     <div className="rounded-2xl border border-dashed border-slate-300 bg-white/50 px-5 py-12 text-center text-sm font-medium text-slate-500 shadow-sm backdrop-blur-sm">
-                                        Aucune tâche ne correspond à vos critères.
+                                        {tr('Aucune tâche ne correspond à vos critères.')}
                                     </div>
                                 )}
                             </div>
@@ -256,11 +257,11 @@ export default function MyDay({ tasks, motifs, closures, stats }: Props) {
                                         <p className="text-xs font-bold uppercase tracking-widest text-emerald-600">{selected.reference}</p>
                                         <h2 className="mt-3 text-2xl font-extrabold text-slate-800 leading-tight">{selected.titre}</h2>
                                         <p className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-slate-500 bg-slate-100 rounded-lg px-3 py-1.5">
-                                            <MapPin size={14}/> {selected.site?.code ?? 'Site libre'} &bull; {selected.departement?.code ?? 'Dépt libre'} &bull; {selected.lieu ?? 'Lieu libre'}
+                                            <MapPin size={14}/> {selected.site?.code ?? tr('Site libre')} &bull; {selected.departement?.code ?? tr('Dépt libre')} &bull; {selected.lieu ?? tr('Lieu libre')}
                                         </p>
                                     </>
                                 ) : (
-                                    <h2 className="text-xl font-bold text-slate-400 py-4 text-center">Aucune tâche sélectionnée</h2>
+                                    <h2 className="text-xl font-bold text-slate-400 py-4 text-center">{tr('Aucune tâche sélectionnée')}</h2>
                                 )}
                             </div>
 
@@ -268,7 +269,7 @@ export default function MyDay({ tasks, motifs, closures, stats }: Props) {
                                 <div className="space-y-6 p-6 bg-slate-50/30">
                                     {selected.instruction && (
                                         <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-5 text-sm leading-relaxed text-emerald-900 shadow-inner font-medium">
-                                            <div className="text-xs font-bold uppercase text-emerald-600 mb-2 tracking-wider">Instructions</div>
+                                            <div className="text-xs font-bold uppercase text-emerald-600 mb-2 tracking-wider">{tr('Instructions')}</div>
                                             {selected.instruction}
                                         </div>
                                     )}
@@ -277,36 +278,36 @@ export default function MyDay({ tasks, motifs, closures, stats }: Props) {
                                         <div className="grid gap-5 xl:grid-cols-2">
                                             <form onSubmit={complete} className="rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm hover:shadow-md transition-shadow">
                                                 <div className="mb-4 flex items-center gap-2.5 font-bold text-emerald-700 text-lg">
-                                                    <div className="p-1.5 bg-emerald-100 rounded-lg"><Check size={18} strokeWidth={3} /></div> Faite
+                                                    <div className="p-1.5 bg-emerald-100 rounded-lg"><Check size={18} strokeWidth={3} /></div> {tr('Faite')}
                                                 </div>
                                                 <div className="grid gap-4 sm:grid-cols-2">
                                                     <label className="grid gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-500">
-                                                        Quantité
+                                                        {tr('Quantité')}
                                                         <input type="number" min="0" step="0.0001" value={completeForm.data.quantite} onChange={(event) => completeForm.setData('quantite', event.target.value)} className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-medium text-slate-800 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all" />
-                                                        <span className="text-[11px] font-medium normal-case tracking-normal text-slate-400">Facultatif : volume réellement exécuté.</span>
+                                                        <span className="text-[11px] font-medium normal-case tracking-normal text-slate-400">{tr('Facultatif : volume réellement exécuté.')}</span>
                                                     </label>
                                                     <label className="grid gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-500">
-                                                        Unité
+                                                        {tr('Unité')}
                                                         <input value={completeForm.data.unite} onChange={(event) => completeForm.setData('unite', event.target.value)} className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-medium text-slate-800 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all" />
-                                                        <span className="text-[11px] font-medium normal-case tracking-normal text-slate-400">Ex : planches, kg, litres, passage.</span>
+                                                        <span className="text-[11px] font-medium normal-case tracking-normal text-slate-400">{tr('Ex : planches, kg, litres, passage.')}</span>
                                                     </label>
                                                 </div>
                                                 <label className="mt-4 grid gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-500">
-                                                    Commentaire
+                                                    {tr('Commentaire')}
                                                     <textarea rows={3} value={completeForm.data.commentaire} onChange={(event) => completeForm.setData('commentaire', event.target.value)} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-800 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all resize-none" />
-                                                    <span className="text-[11px] font-medium normal-case tracking-normal text-slate-400">Ajoutez ce qui aide l’admin à comprendre le résultat.</span>
+                                                    <span className="text-[11px] font-medium normal-case tracking-normal text-slate-400">{tr('Ajoutez ce qui aide l’admin à comprendre le résultat.')}</span>
                                                 </label>
                                                 <button type="submit" disabled={completeForm.processing} className="mt-5 inline-flex h-11 w-full items-center justify-center rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 text-sm font-bold text-white shadow-sm hover:from-emerald-700 hover:to-emerald-800 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 transition-all disabled:opacity-70">
-                                                    Enregistrer
+                                                    {tr('Enregistrer')}
                                                 </button>
                                             </form>
 
                                             <form onSubmit={justify} className="rounded-2xl border border-amber-200 bg-white p-5 shadow-sm hover:shadow-md transition-shadow">
                                                 <div className="mb-4 flex items-center gap-2.5 font-bold text-amber-700 text-lg">
-                                                    <div className="p-1.5 bg-amber-100 rounded-lg"><FileClock size={18} strokeWidth={2.5} /></div> Justifiée
+                                                    <div className="p-1.5 bg-amber-100 rounded-lg"><FileClock size={18} strokeWidth={2.5} /></div> {tr('Justifiée')}
                                                 </div>
                                                 <label className="grid gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-500">
-                                                    Motif
+                                                    {tr('Motif')}
                                                     <select value={justifyForm.data.motif_id} onChange={(event) => justifyForm.setData('motif_id', event.target.value)} className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-medium text-slate-800 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 transition-all">
                                                         {motifs.map((motif) => (
                                                             <option key={motif.id} value={motif.id}>
@@ -314,15 +315,15 @@ export default function MyDay({ tasks, motifs, closures, stats }: Props) {
                                                             </option>
                                                         ))}
                                                     </select>
-                                                    <span className="text-[11px] font-medium normal-case tracking-normal text-slate-400">Choisissez la raison réelle de non-exécution.</span>
+                                                    <span className="text-[11px] font-medium normal-case tracking-normal text-slate-400">{tr('Choisissez la raison réelle de non-exécution.')}</span>
                                                 </label>
                                                 <label className="mt-4 grid gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-500">
-                                                    Preuve / Détails
+                                                    {tr('Preuve / Détails')}
                                                     <input value={justifyForm.data.motif_precision} onChange={(event) => justifyForm.setData('motif_precision', event.target.value)} className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-medium text-slate-800 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 transition-all" />
-                                                    <span className="text-[11px] font-medium normal-case tracking-normal text-slate-400">Ex : bon de travail, responsable consulté, incident, article manquant.</span>
+                                                    <span className="text-[11px] font-medium normal-case tracking-normal text-slate-400">{tr('Ex : bon de travail, responsable consulté, incident, article manquant.')}</span>
                                                 </label>
                                                 <button type="submit" disabled={justifyForm.processing} className="mt-5 inline-flex h-11 w-full items-center justify-center rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-sm font-bold text-white shadow-sm hover:from-amber-600 hover:to-amber-700 focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 transition-all disabled:opacity-70">
-                                                    Justifier
+                                                    {tr('Justifier')}
                                                 </button>
                                             </form>
                                         </div>
@@ -331,14 +332,14 @@ export default function MyDay({ tasks, motifs, closures, stats }: Props) {
                                             <div className="inline-block p-3 rounded-full bg-slate-100 mb-3"><Check size={24} className="text-emerald-500" strokeWidth={3}/></div>
                                             <div className="font-bold text-lg text-slate-800">{statusText[selected.statut] ?? selected.statut}</div>
                                             <div className="mt-2 text-sm font-medium text-slate-500 bg-slate-50 rounded-lg p-3 border border-slate-100">
-                                                {selected.commentaire || selected.motif?.libelle || selected.motif_precision || 'Traitement enregistré avec succès.'}
+                                                {selected.commentaire || selected.motif?.libelle || selected.motif_precision || tr('Traitement enregistré avec succès.')}
                                             </div>
                                         </div>
                                     )}
 
                                     {selected.evenements.length > 0 && (
                                         <div className="pt-4 border-t border-emerald-950/5">
-                                            <div className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-400">Historique des actions</div>
+                                            <div className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-400">{tr('Historique des actions')}</div>
                                             <div className="space-y-3 relative before:absolute before:inset-0 before:ml-2 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-200 before:to-transparent">
                                                 {selected.evenements.map((event) => (
                                                     <div key={event.id} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">

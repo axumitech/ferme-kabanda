@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Head, router, usePage } from '@inertiajs/react';
 import { offlineQueue } from '@/lib/offline-queue';
+import { useI18n } from '@/lib/i18n';
 
 const csrfToken = () =>
     document
@@ -1742,6 +1743,7 @@ export default function App({
     mapFeatures = /** @type {any[]} */ ([]),
 }) {
     const { auth } = usePage().props;
+    const { tr: trText } = useI18n();
     const carte = mapFeatures.length
         ? mapFeatures.map((feature) => ({
               n: feature.name,
@@ -1803,6 +1805,8 @@ export default function App({
     const [bureau, setBureau] = useState('AGRI');
     const [date, setDate] = useState(today);
     const [vue, setVue] = useState('accueil');
+    const [formulaireOuvert, setFormulaireOuvert] = useState(null);
+    const [rapportHistorique, setRapportHistorique] = useState(false);
     const [lieu, setLieu] = useState('');
     const [etat, setEtat] = useState('');
     const [assign, setAssign] = useState({});
@@ -1980,26 +1984,42 @@ export default function App({
         setFormFreq([]);
     };
 
+    const appliquerRapport = (d) => {
+        setMeteo(d.meteo || '');
+        setPluie(d.pluie || '');
+        setPresents(d.presents || '');
+        setAbsents(d.absents || '');
+        setRedacteur(d.redacteur || '');
+        setTravaux(d.travaux || []);
+        setProduits(d.produits || []);
+        setEau(d.eau || []);
+        setRecoltes(d.recoltes || []);
+        setCheptel(d.cheptel || []);
+        setAlim(d.alim || []);
+        setSante(d.sante || []);
+        setProblemes(d.problemes || []);
+        setFormFreq(d.formFreq || []);
+    };
+
+    const ouvrirRapportHistorique = async (historique) => {
+        try {
+            const r = await window.storage.get(historique.cle, true);
+            if (!r?.value) throw new Error('rapport introuvable');
+            appliquerRapport(JSON.parse(r.value));
+            setDate(historique.date);
+            setRapportHistorique(true);
+            setVue('rapport');
+        } catch {
+            flash('Impossible d’ouvrir ce rapport enregistré');
+        }
+    };
+
     useEffect(() => {
         (async () => {
             try {
                 const r = await window.storage.get(cle, true);
                 if (r && r.value) {
-                    const d = JSON.parse(r.value);
-                    setMeteo(d.meteo || '');
-                    setPluie(d.pluie || '');
-                    setPresents(d.presents || '');
-                    setAbsents(d.absents || '');
-                    setRedacteur(d.redacteur || '');
-                    setTravaux(d.travaux || []);
-                    setProduits(d.produits || []);
-                    setEau(d.eau || []);
-                    setRecoltes(d.recoltes || []);
-                    setCheptel(d.cheptel || []);
-                    setAlim(d.alim || []);
-                    setSante(d.sante || []);
-                    setProblemes(d.problemes || []);
-                    setFormFreq(d.formFreq || []);
+                    appliquerRapport(JSON.parse(r.value));
                 } else vider();
             } catch {
                 vider();
@@ -3698,7 +3718,26 @@ export default function App({
         'rapport',
     ];
     const idx = ORDRE.indexOf(vue);
-    const NavBas = () => (
+    const estSaisieDeLieu =
+        Boolean(lieu) &&
+        vue !== 'atelier' &&
+        SECTIONS.some(([section]) => section === vue);
+    const retourContexte = () =>
+        setVue(bureau === 'AGRI' ? 'parcelle' : 'atelier');
+    const NavBas = ({ retour, suivant, libelleRetour, libelleSuivant } = {}) => {
+        const retourEffectif = retour ?? (estSaisieDeLieu ? retourContexte : null);
+        const retourLabel =
+            libelleRetour ??
+            (estSaisieDeLieu
+                ? trText(
+                      bureau === 'AGRI'
+                          ? '← Retour à la parcelle'
+                          : '← Retour à l’atelier',
+                  )
+                : trText('← Retour'));
+        const suivantLabel = libelleSuivant ?? trText('Suivant →');
+
+        return (
         <div
             style={{
                 display: 'flex',
@@ -3709,8 +3748,8 @@ export default function App({
             }}
         >
             <button
-                onClick={() => setVue(ORDRE[Math.max(0, idx - 1)])}
-                disabled={idx <= 0}
+                onClick={() => retourEffectif ? retourEffectif() : setVue(ORDRE[Math.max(0, idx - 1)])}
+                disabled={!retourEffectif && idx <= 0}
                 style={{
                     flex: 1,
                     padding: 16,
@@ -3719,18 +3758,16 @@ export default function App({
                     borderRadius: 4,
                     border: `2px solid ${C.line}`,
                     background: '#fff',
-                    color: idx <= 0 ? '#bbb' : C.ink,
+                    color: !retourEffectif && idx <= 0 ? '#bbb' : C.ink,
                     fontFamily: 'Oswald, sans-serif',
-                    cursor: idx <= 0 ? 'default' : 'pointer',
+                    cursor: !retourEffectif && idx <= 0 ? 'default' : 'pointer',
                 }}
             >
-                ← Retour
+                {retourLabel}
             </button>
             <button
-                onClick={() =>
-                    setVue(ORDRE[Math.min(ORDRE.length - 1, idx + 1)])
-                }
-                disabled={idx >= ORDRE.length - 1}
+                onClick={() => suivant ? suivant() : setVue(ORDRE[Math.min(ORDRE.length - 1, idx + 1)])}
+                disabled={!suivant && idx >= ORDRE.length - 1}
                 style={{
                     flex: 1,
                     padding: 16,
@@ -3738,16 +3775,17 @@ export default function App({
                     fontWeight: 700,
                     borderRadius: 4,
                     border: 'none',
-                    background: idx >= ORDRE.length - 1 ? '#ccc' : C.laterite,
+                    background: !suivant && idx >= ORDRE.length - 1 ? '#ccc' : C.laterite,
                     color: '#fff',
                     fontFamily: 'Oswald, sans-serif',
                     cursor: 'pointer',
                 }}
             >
-                Suivant →
+                {suivantLabel}
             </button>
         </div>
-    );
+        );
+    };
 
     const EnTete = () => {
         const a = assign[lieu];
@@ -3866,7 +3904,7 @@ export default function App({
                 )}
                 {dues.length > 0 && (
                     <div style={{ marginBottom: 16 }}>
-                        <Label>Tâches dues d'après le calendrier</Label>
+                        <Label>{trText("Tâches dues d'après le calendrier")}</Label>
                         {dues.map((x, i) => {
                             const col =
                                 x.statut === 'EN RETARD'
@@ -4423,15 +4461,15 @@ export default function App({
                             style={{ display: 'flex', gap: 10, marginTop: 16 }}
                         >
                             <Btn tone="ghost" onClick={() => setVue('jour')}>
-                                Journée
+                                {trText('Journée')}
                             </Btn>
-                            <Btn tone="ghost" onClick={() => setVue('freq')}>
-                                Formulaires
+                            <Btn tone="ghost" onClick={() => { setFormulaireOuvert(null); setVue('freq'); }}>
+                                {trText('Formulaires')}
                             </Btn>
                         </div>
                         <div style={{ display: 'flex', gap: 10 }}>
                             <Btn tone="ghost" onClick={() => setVue('stock')}>
-                                Stock
+                                {trText('Stock')}
                             </Btn>
                             <Btn tone="ghost" onClick={() => setVue('epi')}>
                                 EPI
@@ -4439,10 +4477,10 @@ export default function App({
                         </div>
                         <div style={{ display: 'flex', gap: 10 }}>
                             <Btn tone="ghost" onClick={() => setVue('maint')}>
-                                Maintenance
+                                {trText('Maintenance')}
                             </Btn>
                             <Btn tone="ghost" onClick={() => setVue('inv')}>
-                                Inventaire
+                                {trText('Inventaire')}
                             </Btn>
                         </div>
                         <div style={{ display: 'flex', gap: 10 }}>
@@ -4451,24 +4489,24 @@ export default function App({
                                     tone="ghost"
                                     onClick={() => setVue('truies')}
                                 >
-                                    Truies
+                                    {trText('Truies')}
                                 </Btn>
                             )}
                             <Btn tone="ghost" onClick={() => setVue('req')}>
-                                Réquisitions
+                                {trText('Réquisitions')}
                             </Btn>
                         </div>
                         <div style={{ display: 'flex', gap: 10 }}>
-                            <Btn tone="ghost" onClick={() => setVue('rapport')}>
-                                Rapport
+                            <Btn tone="ghost" onClick={() => { setRapportHistorique(false); setVue('rapport'); }}>
+                                {trText('Rapport')}
                             </Btn>
                             <Btn tone="ghost" onClick={() => setVue('histo')}>
-                                Historique
+                                {trText('Historique')}
                             </Btn>
                         </div>
                         <div style={{ display: 'flex', gap: 10 }}>
                             <Btn tone="ghost" onClick={() => setVue('journal')}>
-                                Journal
+                                {trText('Journal')}
                             </Btn>
                         </div>
                     </>
@@ -4514,7 +4552,7 @@ export default function App({
                                             .join(' · ')}
                                     </div>
                                 )}
-                                <Label>Assigner une culture</Label>
+                                <Label>{trText('Assigner une culture')}</Label>
                                 <Sel
                                     value={nc.culture}
                                     onChange={(v) =>
@@ -4540,7 +4578,7 @@ export default function App({
                                             {avertRotation(lieu, nc.culture)}
                                         </div>
                                     )}
-                                <Label>Date de plantation (J0)</Label>
+                                <Label>{trText('Date de plantation (J0)')}</Label>
                                 <input
                                     type="date"
                                     value={nc.j0}
@@ -4610,13 +4648,18 @@ export default function App({
                                 </div>
                             </>
                         )}
-                        <NavBas />
+                        <NavBas
+                            retour={() => setVue('accueil')}
+                            suivant={() => setVue('jour')}
+                            libelleRetour={trText('← Accueil')}
+                            libelleSuivant={trText('Saisir la journée →')}
+                        />
                     </>
                 )}
 
                 {vue === 'jour' && (
                     <>
-                        <Label>Météo</Label>
+                        <Label>{trText('Météo')}</Label>
                         <Sel
                             value={meteo}
                             onChange={(v) => {
@@ -4626,17 +4669,17 @@ export default function App({
                             options={['Sec', 'Pluie', 'Couvert', 'Forte pluie']}
                             placeholder="Choisir"
                         />
-                        <Label>Pluviomètre — combien de mm</Label>
+                        <Label>{trText('Pluviomètre — combien de mm')}</Label>
                         <Compteur value={pluie} onChange={setPluie} />
-                        <Label>Personnes présentes</Label>
+                        <Label>{trText('Personnes présentes')}</Label>
                         <Compteur value={presents} onChange={setPresents} />
-                        <Label>Absents</Label>
+                        <Label>{trText('Absents')}</Label>
                         <Txt
                             value={absents}
                             onChange={setAbsents}
                             placeholder="Noms, ou « aucun »"
                         />
-                        <Label>Qui remplit ce rapport</Label>
+                        <Label>{trText('Qui remplit ce rapport')}</Label>
                         <Sel
                             value={redacteur}
                             onChange={(v) => {
@@ -4651,7 +4694,7 @@ export default function App({
                             options={AGENTS}
                             placeholder="Choisir"
                         />
-                        <Label>Centre de coût de la journée</Label>
+                        <Label>{trText('Centre de coût de la journée')}</Label>
                         <Sel
                             value={cc}
                             onChange={setCc}
@@ -4687,7 +4730,7 @@ export default function App({
                                 placeholder="Choisir le lieu"
                             />
                         )}
-                        <Label>Quelle tâche</Label>
+                        <Label>{trText('Quelle tâche')}</Label>
                         {!lieu && bureau === 'ANI' && (
                             <div
                                 style={{
@@ -4712,7 +4755,7 @@ export default function App({
                             options={TACHES_DISPO}
                             placeholder="Choisir"
                         />
-                        <Label>Combien</Label>
+                        <Label>{trText('Combien')}</Label>
                         <Compteur
                             value={tv.qte}
                             onChange={(v) => setTv({ ...tv, qte: v })}
@@ -4720,7 +4763,7 @@ export default function App({
                             setUnite={(u) => setTv({ ...tv, unite: u })}
                             unites={unitesPour(tv.tache)}
                         />
-                        <Label>Qui a travaillé — plusieurs possibles</Label>
+                        <Label>{trText('Qui a travaillé — plusieurs possibles')}</Label>
                         <MultiSel
                             options={AGENTS}
                             selected={tv.qui}
@@ -4808,7 +4851,7 @@ export default function App({
                                 placeholder="Choisir le lieu"
                             />
                         )}
-                        <Label>Produits — plusieurs si mélange en cuve</Label>
+                        <Label>{trText('Produits — plusieurs si mélange en cuve')}</Label>
                         <MultiSel
                             options={produitsCatalogue}
                             selected={pr.prods}
@@ -4904,7 +4947,7 @@ export default function App({
                             value={pr.sortie}
                             onChange={(v) => setPr({ ...pr, sortie: v })}
                         />
-                        <Label>Qui a mesuré</Label>
+                        <Label>{trText('Qui a mesuré')}</Label>
                         <MultiSel
                             options={AGENTS}
                             selected={pr.qui}
@@ -4986,12 +5029,12 @@ export default function App({
                                 placeholder="Choisir le lieu"
                             />
                         )}
-                        <Label>Combien de minutes</Label>
+                        <Label>{trText('Combien de minutes')}</Label>
                         <Compteur
                             value={ea.minutes}
                             onChange={(v) => setEa({ ...ea, minutes: v })}
                         />
-                        <Label>Test du doigt — humide à 10 cm ?</Label>
+                        <Label>{trText('Test du doigt — humide à 10 cm ?')}</Label>
                         <Sel
                             value={ea.doigt}
                             onChange={(v) => setEa({ ...ea, doigt: v })}
@@ -5002,7 +5045,7 @@ export default function App({
                             ]}
                             placeholder="Répondre"
                         />
-                        <Label>Problème sur la ligne</Label>
+                        <Label>{trText('Problème sur la ligne')}</Label>
                         <Txt
                             value={ea.souci}
                             onChange={(v) => setEa({ ...ea, souci: v })}
@@ -5117,19 +5160,19 @@ export default function App({
                                 {totalRec} kg
                             </div>
                         </div>
-                        <Label>Combien de kg</Label>
+                        <Label>{trText('Combien de kg')}</Label>
                         <Compteur
                             value={rc.kg}
                             onChange={(v) => setRc({ ...rc, kg: v })}
                         />
-                        <Label>Où va cette récolte</Label>
+                        <Label>{trText('Où va cette récolte')}</Label>
                         <Sel
                             value={rc.dest}
                             onChange={(v) => setRc({ ...rc, dest: v })}
                             options={destinations}
                             placeholder="Choisir la destination"
                         />
-                        <Label>Qualité</Label>
+                        <Label>{trText('Qualité')}</Label>
                         <Sel
                             value={rc.qualite}
                             onChange={(v) => setRc({ ...rc, qualite: v })}
@@ -5140,7 +5183,7 @@ export default function App({
                             ]}
                             placeholder="Choisir"
                         />
-                        <Label>Pertes / rebuts (kg)</Label>
+                        <Label>{trText('Pertes / rebuts (kg)')}</Label>
                         <Compteur
                             value={rc.perte}
                             onChange={(v) => setRc({ ...rc, perte: v })}
@@ -6416,22 +6459,22 @@ export default function App({
                                 Direction
                             </div>
                         )}
-                        <Label>Effectif compté</Label>
+                        <Label>{trText('Effectif compté')}</Label>
                         <Compteur
                             value={ch.effectif}
                             onChange={(v) => setCh({ ...ch, effectif: v })}
                         />
-                        <Label>Naissances</Label>
+                        <Label>{trText('Naissances')}</Label>
                         <Compteur
                             value={ch.naissances}
                             onChange={(v) => setCh({ ...ch, naissances: v })}
                         />
-                        <Label>Mortalités</Label>
+                        <Label>{trText('Mortalités')}</Label>
                         <Compteur
                             value={ch.mortalites}
                             onChange={(v) => setCh({ ...ch, mortalites: v })}
                         />
-                        <Label>Cause présumée</Label>
+                        <Label>{trText('Cause présumée')}</Label>
                         <Txt
                             value={ch.cause}
                             onChange={(v) => setCh({ ...ch, cause: v })}
@@ -6456,7 +6499,7 @@ export default function App({
                                 )
                             }
                         >
-                            Ajouter
+                            {trText('Ajouter')}
                         </Btn>
                         {cheptel.map((c, i) => (
                             <Card
@@ -6514,7 +6557,7 @@ export default function App({
                                         fontWeight: 600,
                                     }}
                                 >
-                                    Retirer
+                                    {trText('Retirer')}
                                 </button>
                             </Card>
                         ))}
@@ -6534,7 +6577,7 @@ export default function App({
                                 placeholder="Choisir l'atelier"
                             />
                         )}
-                        <Label>Aliment distribué</Label>
+                        <Label>{trText('Aliment distribué')}</Label>
                         {!lieu && (
                             <div
                                 style={{
@@ -6553,12 +6596,12 @@ export default function App({
                             options={ALIM_DISPO}
                             placeholder="Choisir"
                         />
-                        <Label>Combien de kg</Label>
+                        <Label>{trText('Combien de kg')}</Label>
                         <Compteur
                             value={al.kg}
                             onChange={(v) => setAl({ ...al, kg: v })}
                         />
-                        <Label>Abreuvoirs propres et pleins ?</Label>
+                        <Label>{trText('Abreuvoirs propres et pleins ?')}</Label>
                         <Sel
                             value={al.eau}
                             onChange={(v) => setAl({ ...al, eau: v })}
@@ -6583,7 +6626,7 @@ export default function App({
                                 )
                             }
                         >
-                            Ajouter
+                            {trText('Ajouter')}
                         </Btn>
                         {alim.map((a, i) => (
                             <Card key={i}>
@@ -6622,7 +6665,7 @@ export default function App({
                                         fontWeight: 600,
                                     }}
                                 >
-                                    Retirer
+                                    {trText('Retirer')}
                                 </button>
                             </Card>
                         ))}
@@ -6642,25 +6685,25 @@ export default function App({
                                 placeholder="Choisir l'atelier"
                             />
                         )}
-                        <Label>Type de soin</Label>
+                        <Label>{trText('Type de soin')}</Label>
                         <Sel
                             value={sa.soin}
                             onChange={(v) => setSa({ ...sa, soin: v })}
                             options={soins}
                             placeholder="Choisir"
                         />
-                        <Label>Produit et dose</Label>
+                        <Label>{trText('Produit et dose')}</Label>
                         <Txt
                             value={sa.produit}
                             onChange={(v) => setSa({ ...sa, produit: v })}
                             placeholder="Nom + dose par animal"
                         />
-                        <Label>Combien d'animaux</Label>
+                        <Label>{trText("Combien d'animaux")}</Label>
                         <Compteur
                             value={sa.nb}
                             onChange={(v) => setSa({ ...sa, nb: v })}
                         />
-                        <Label>Qui a fait le soin</Label>
+                        <Label>{trText('Qui a fait le soin')}</Label>
                         <MultiSel
                             options={AGENTS}
                             selected={sa.qui}
@@ -6687,7 +6730,7 @@ export default function App({
                                 )
                             }
                         >
-                            Ajouter
+                            {trText('Ajouter')}
                         </Btn>
                         {sante.map((s, i) => (
                             <Card key={i}>
@@ -6721,7 +6764,7 @@ export default function App({
                                         fontWeight: 600,
                                     }}
                                 >
-                                    Retirer
+                                    {trText('Retirer')}
                                 </button>
                             </Card>
                         ))}
@@ -6756,14 +6799,14 @@ export default function App({
                             sans savoir ce que c'est. Ce n'est pas à vous de
                             savoir — c'est à vous de signaler.
                         </div>
-                        <Label>Ce que vous avez vu</Label>
+                        <Label>{trText('Ce que vous avez vu')}</Label>
                         <Txt
                             value={pb.quoi}
                             onChange={(v) => setPb({ ...pb, quoi: v })}
                             lines={3}
                             placeholder="Ex : 12 plants de chou, cœur jauni, déjections brunes"
                         />
-                        <Label>Photo prise ?</Label>
+                        <Label>{trText('Photo prise ?')}</Label>
                         <Sel
                             value={pb.photo}
                             onChange={(v) => setPb({ ...pb, photo: v })}
@@ -6784,7 +6827,7 @@ export default function App({
                                 )
                             }
                         >
-                            Signaler
+                            {trText('Signaler')}
                         </Btn>
                         {problemes.map((p, i) => (
                             <Card key={i} tone={C.red}>
@@ -6821,7 +6864,7 @@ export default function App({
                                         fontWeight: 600,
                                     }}
                                 >
-                                    Retirer
+                                    {trText('Retirer')}
                                 </button>
                             </Card>
                         ))}
@@ -6831,7 +6874,7 @@ export default function App({
 
                 {vue === 'inv' && (
                     <>
-                        <Label>Inventaire du magasin</Label>
+                        <Label>{trText('Inventaire du magasin')}</Label>
                         <div
                             style={{
                                 background: C.green,
@@ -6848,7 +6891,7 @@ export default function App({
                                     fontFamily: 'Oswald, sans-serif',
                                 }}
                             >
-                                VALEUR TOTALE DU STOCK
+                                {trText('VALEUR TOTALE DU STOCK')}
                             </div>
                             <div
                                 style={{
@@ -6900,7 +6943,7 @@ export default function App({
                             </div>
                         )}
 
-                        <Label>Créer un article</Label>
+                        <Label>{trText('Créer un article')}</Label>
                         <Sel
                             value={art.cat}
                             onChange={(v) => setArt({ ...art, cat: v })}
@@ -6933,17 +6976,17 @@ export default function App({
                             options={UNITES_ART}
                             placeholder="Unité"
                         />
-                        <Label>Quantité en magasin</Label>
+                        <Label>{trText('Quantité en magasin')}</Label>
                         <Compteur
                             value={art.qte}
                             onChange={(v) => setArt({ ...art, qte: v })}
                         />
-                        <Label>Prix unitaire (USD)</Label>
+                        <Label>{trText('Prix unitaire (USD)')}</Label>
                         <Compteur
                             value={art.pu}
                             onChange={(v) => setArt({ ...art, pu: v })}
                         />
-                        <Label>Seuil minimum d'alerte</Label>
+                        <Label>{trText("Seuil minimum d'alerte")}</Label>
                         <Compteur
                             value={art.mini}
                             onChange={(v) => setArt({ ...art, mini: v })}
@@ -6977,10 +7020,10 @@ export default function App({
                                 flash('Article créé');
                             }}
                         >
-                            Créer l'article
+                            {trText("Créer l'article")}
                         </Btn>
 
-                        <Label>Articles référencés</Label>
+                        <Label>{trText('Articles référencés')}</Label>
                         {!articles.length && (
                             <div
                                 style={{
@@ -7072,7 +7115,7 @@ export default function App({
 
                 {vue === 'req' && (
                     <>
-                        <Label>Réquisitions</Label>
+                        <Label>{trText('Réquisitions')}</Label>
                         {reqs.filter((r) => r.statut === 'Demandée').length >
                             0 && (
                             <div
@@ -7095,7 +7138,7 @@ export default function App({
                             </div>
                         )}
 
-                        <Label>Type de demande</Label>
+                        <Label>{trText('Type de demande')}</Label>
                         {Object.keys(TYPES_REQ).map((k) => (
                             <button
                                 key={k}
@@ -7152,7 +7195,7 @@ export default function App({
 
                                 {rq.type === 'STK' && (
                                     <>
-                                        <Label>Article à sortir</Label>
+                                        <Label>{trText('Article à sortir')}</Label>
                                         <Sel
                                             value={rq.article}
                                             onChange={(v) =>
@@ -7190,7 +7233,7 @@ export default function App({
                                                     </div>
                                                 ) : null;
                                             })()}
-                                        <Label>Quantité demandée</Label>
+                                        <Label>{trText('Quantité demandée')}</Label>
                                         <Compteur
                                             value={rq.qte}
                                             onChange={(v) =>
@@ -7202,7 +7245,7 @@ export default function App({
 
                                 {rq.type === 'CSH' && (
                                     <>
-                                        <Label>Montant demandé (USD)</Label>
+                                        <Label>{trText('Montant demandé (USD)')}</Label>
                                         <Compteur
                                             value={rq.montant}
                                             onChange={(v) =>
@@ -7215,7 +7258,7 @@ export default function App({
                                 {rq.type === 'NEW' && (
                                     <>
                                         <Label>
-                                            Catégorie du nouvel article
+                                            {trText('Catégorie du nouvel article')}
                                         </Label>
                                         <Sel
                                             value={rq.nouvCat}
@@ -7242,7 +7285,7 @@ export default function App({
                                             options={UNITES_ART}
                                             placeholder="Unité"
                                         />
-                                        <Label>Quantité</Label>
+                                        <Label>{trText('Quantité')}</Label>
                                         <Compteur
                                             value={rq.qte}
                                             onChange={(v) =>
@@ -7250,7 +7293,7 @@ export default function App({
                                             }
                                         />
                                         <Label>
-                                            Prix unitaire estimé (USD)
+                                            {trText('Prix unitaire estimé (USD)')}
                                         </Label>
                                         <Compteur
                                             value={rq.nouvPu}
@@ -7277,13 +7320,13 @@ export default function App({
                                     </>
                                 )}
 
-                                <Label>Objet de la demande</Label>
+                                <Label>{trText('Objet de la demande')}</Label>
                                 <Txt
                                     value={rq.objet}
                                     onChange={(v) => setRq({ ...rq, objet: v })}
                                     placeholder="À quoi cela va servir"
                                 />
-                                <Label>Justification</Label>
+                                <Label>{trText('Justification')}</Label>
                                 <Txt
                                     value={rq.justif}
                                     onChange={(v) =>
@@ -7292,7 +7335,7 @@ export default function App({
                                     lines={2}
                                     placeholder="Pourquoi c'est nécessaire maintenant"
                                 />
-                                <Label>Urgence</Label>
+                                <Label>{trText('Urgence')}</Label>
                                 <Sel
                                     value={rq.urgence}
                                     onChange={(v) =>
@@ -7301,7 +7344,7 @@ export default function App({
                                     options={PRIORITES}
                                     placeholder="Choisir"
                                 />
-                                <Label>Centre de coût</Label>
+                                <Label>{trText('Centre de coût')}</Label>
                                 <Sel
                                     value={rq.cc}
                                     onChange={(v) =>
@@ -7313,7 +7356,7 @@ export default function App({
                                     placeholder={`Par défaut : ${CC}`}
                                 />
                                 <Btn onClick={creerReq}>
-                                    Créer la réquisition
+                                    {trText('Créer la réquisition')}
                                 </Btn>
                                 <div
                                     style={{
@@ -7331,7 +7374,7 @@ export default function App({
                             </>
                         )}
 
-                        <Label>Réquisitions enregistrées</Label>
+                        <Label>{trText('Réquisitions enregistrées')}</Label>
                         {!reqs.length && (
                             <div
                                 style={{
@@ -7340,7 +7383,7 @@ export default function App({
                                     padding: 12,
                                 }}
                             >
-                                Aucune réquisition.
+                                {trText('Aucune réquisition.')}
                             </div>
                         )}
                         {reqs.slice(0, 30).map((r) => {
@@ -7509,7 +7552,7 @@ export default function App({
                 {vue === 'maint' && (
                     <>
                         <Label>
-                            Maintenance — parc matériel et bons de travail
+                            {trText('Maintenance — parc matériel et bons de travail')}
                         </Label>
                         {entretiensDus().length > 0 && (
                             <div
@@ -7546,7 +7589,7 @@ export default function App({
                             </div>
                         )}
 
-                        <Label>Relevé de compteur</Label>
+                        <Label>{trText('Relevé de compteur')}</Label>
                         <Sel
                             value={bt.equip}
                             onChange={(v) => setBt({ ...bt, equip: v })}
@@ -7596,7 +7639,7 @@ export default function App({
                                 </>
                             )}
 
-                        <Label>Nouveau bon de travail</Label>
+                        <Label>{trText('Nouveau bon de travail')}</Label>
                         <Sel
                             value={bt.metier}
                             onChange={(v) =>
@@ -7620,14 +7663,14 @@ export default function App({
                                 <b>{numeroBT(bt.metier.split(' —')[0])}</b>
                             </div>
                         )}
-                        <Label>Description du problème ou des travaux</Label>
+                        <Label>{trText('Description du problème ou des travaux')}</Label>
                         <Txt
                             value={bt.desc}
                             onChange={(v) => setBt({ ...bt, desc: v })}
                             lines={3}
                             placeholder="Ce qui est constaté et ce qu'il faut faire"
                         />
-                        <Label>Priorité</Label>
+                        <Label>{trText('Priorité')}</Label>
                         <Sel
                             value={bt.prio}
                             onChange={(v) => setBt({ ...bt, prio: v })}
@@ -7637,7 +7680,7 @@ export default function App({
 
                         {bt.metier && METIERS[bt.metier.split(' —')[0]] && (
                             <>
-                                <Label>Détails propres au métier</Label>
+                                <Label>{trText('Détails propres au métier')}</Label>
                                 {METIERS[bt.metier.split(' —')[0]].champs.map(
                                     (c) => (
                                         <div
@@ -7677,12 +7720,12 @@ export default function App({
                                 )}
                             </>
                         )}
-                        <Label>Coût estimé (USD)</Label>
+                        <Label>{trText('Coût estimé (USD)')}</Label>
                         <Compteur
                             value={bt.cout}
                             onChange={(v) => setBt({ ...bt, cout: v })}
                         />
-                        <Btn onClick={creerBT}>Créer le bon de travail</Btn>
+                        <Btn onClick={creerBT}>{trText('Créer le bon de travail')}</Btn>
                         <div
                             style={{
                                 fontSize: 13.5,
@@ -7698,7 +7741,7 @@ export default function App({
                             d'Entreprise.
                         </div>
 
-                        <Label>Bons de travail</Label>
+                        <Label>{trText('Bons de travail')}</Label>
                         {!bts.length && (
                             <div
                                 style={{
@@ -7707,7 +7750,7 @@ export default function App({
                                     padding: 12,
                                 }}
                             >
-                                Aucun bon de travail.
+                                {trText('Aucun bon de travail.')}
                             </div>
                         )}
                         {bts.slice(0, 30).map((b) => {
@@ -7866,7 +7909,7 @@ export default function App({
 
                 {vue === 'epi' && (
                     <>
-                        <Label>Équipements de protection individuelle</Label>
+                        <Label>{trText('Équipements de protection individuelle')}</Label>
                         {(() => {
                             const actifs = epis.filter((e) => !e.remplace);
                             const exp = actifs.filter(
@@ -7902,7 +7945,7 @@ export default function App({
                             ) : null;
                         })()}
 
-                        <Label>Remettre un EPI</Label>
+                        <Label>{trText('Remettre un EPI')}</Label>
                         <Sel
                             value={ep.agent}
                             onChange={(v) =>
@@ -8004,9 +8047,9 @@ export default function App({
                                 </div>
                             )}
 
-                        <Btn onClick={remettreEpi}>Enregistrer la remise</Btn>
+                        <Btn onClick={remettreEpi}>{trText('Enregistrer la remise')}</Btn>
 
-                        <Label>Dotations en cours</Label>
+                        <Label>{trText('Dotations en cours')}</Label>
                         {!epis.filter((e) => !e.remplace).length && (
                             <div
                                 style={{
@@ -8015,7 +8058,7 @@ export default function App({
                                     padding: 12,
                                 }}
                             >
-                                Aucune dotation enregistrée.
+                                {trText('Aucune dotation enregistrée.')}
                             </div>
                         )}
                         {epis
@@ -8101,7 +8144,7 @@ export default function App({
 
                         {epis.some((e) => e.remplace) && (
                             <>
-                                <Label>Historique des remplacements</Label>
+                                <Label>{trText('Historique des remplacements')}</Label>
                                 {epis
                                     .filter((e) => e.remplace)
                                     .slice(0, 20)
@@ -8135,7 +8178,7 @@ export default function App({
 
                 {vue === 'stock' && (
                     <>
-                        <Label>Stock du magasin</Label>
+                        <Label>{trText('Stock du magasin')}</Label>
                         <div
                             style={{
                                 fontSize: 14,
@@ -8154,7 +8197,7 @@ export default function App({
                             options={produitsCatalogue}
                             placeholder="Choisir le produit"
                         />
-                        <Label>Quantité en magasin (kg ou L)</Label>
+                        <Label>{trText('Quantité en magasin (kg ou L)')}</Label>
                         <Compteur
                             value={stk.qte}
                             onChange={(v) => setStk({ ...stk, qte: v })}
@@ -8180,7 +8223,7 @@ export default function App({
                                 flash('Stock mis à jour');
                             }}
                         >
-                            Enregistrer ce stock
+                            {trText('Enregistrer ce stock')}
                         </Btn>
                         {Object.entries(stock)
                             .filter(([, v]) => v > 0 || v === 0)
@@ -8247,7 +8290,53 @@ export default function App({
                 {vue === 'freq' && (
                     <>
                         <Label>Formulaires périodiques</Label>
-                        {Object.entries(RECUR[bureau]).map(([freq, items]) => {
+                        {!formulaireOuvert && (
+                            <>
+                                <div
+                                    style={{
+                                        color: '#666',
+                                        fontSize: 14,
+                                        lineHeight: 1.5,
+                                        marginBottom: 14,
+                                    }}
+                                >
+                                    Choisissez un formulaire. Vous ne verrez qu’une fiche à la fois,
+                                    puis reviendrez ici sans perdre votre saisie.
+                                </div>
+                                {Object.entries(RECUR[bureau]).map(([freq, items]) => {
+                                    const f = formFreq.find((x) => x.freq === freq) || { coches: [] };
+                                    return (
+                                        <button
+                                            key={freq}
+                                            type="button"
+                                            onClick={() => setFormulaireOuvert(freq)}
+                                            style={{
+                                                display: 'flex',
+                                                width: '100%',
+                                                justifyContent: 'space-between',
+                                                alignItems: 'center',
+                                                marginBottom: 10,
+                                                padding: '16px 14px',
+                                                background: '#fff',
+                                                border: `1px solid ${C.line}`,
+                                                borderRadius: 4,
+                                                color: C.ink,
+                                                cursor: 'pointer',
+                                                fontFamily: 'Oswald, sans-serif',
+                                                fontSize: 16,
+                                                fontWeight: 700,
+                                            }}
+                                        >
+                                            <span>{freq}</span>
+                                            <span style={{ color: C.green2, fontSize: 14 }}>
+                                                {f.coches.length}/{items.length} · Ouvrir →
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+                            </>
+                        )}
+                        {Object.entries(RECUR[bureau]).filter(([freq]) => freq === formulaireOuvert).map(([freq, items]) => {
                             const f = formFreq.find((x) => x.freq === freq) || {
                                 coches: [],
                             };
@@ -8336,12 +8425,65 @@ export default function App({
                                 </div>
                             );
                         })}
-                        <NavBas />
+                        {formulaireOuvert ? (
+                            <NavBas
+                                retour={() => setFormulaireOuvert(null)}
+                                suivant={() => { setRapportHistorique(false); setVue('rapport'); }}
+                                libelleRetour={trText('← Tous les formulaires')}
+                                libelleSuivant={trText('Voir le rapport →')}
+                            />
+                        ) : (
+                            <NavBas
+                                retour={() => setVue('accueil')}
+                                suivant={() => { setRapportHistorique(false); setVue('rapport'); }}
+                                libelleRetour={trText('← Accueil')}
+                                libelleSuivant={trText('Voir le rapport →')}
+                            />
+                        )}
                     </>
                 )}
 
                 {vue === 'rapport' && (
                     <>
+                        <Label>{trText('Rapport de fin de journée')}</Label>
+                        <div
+                            style={{
+                                background: '#fff',
+                                border: `1px solid ${C.line}`,
+                                borderRadius: 4,
+                                padding: 14,
+                                marginBottom: 14,
+                            }}
+                        >
+                            <div
+                                style={{
+                                    fontFamily: 'Oswald, sans-serif',
+                                    fontSize: 18,
+                                    fontWeight: 700,
+                                    color: C.ink,
+                                }}
+                            >
+                                {bureau === 'AGRI' ? 'BT Agri' : 'BT Animal'} · {date}
+                            </div>
+                            <div
+                                style={{
+                                    display: 'flex',
+                                    flexWrap: 'wrap',
+                                    gap: 8,
+                                    marginTop: 10,
+                                    fontSize: 14,
+                                    color: '#555',
+                                }}
+                            >
+                                <span>{travaux.length + cheptel.length} saisie(s)</span>
+                                <span>· {problemes.length} problème(s)</span>
+                                <span>· {formFreq.reduce((n, f) => n + (f.faits || 0), 0)} contrôle(s) périodique(s)</span>
+                                {bureau === 'AGRI' && <span>· {totalRec} kg récoltés</span>}
+                            </div>
+                            <div style={{ fontSize: 13, color: '#777', marginTop: 8, lineHeight: 1.45 }}>
+                                {trText('Vérifiez les alertes ci-dessous, puis copiez, téléchargez ou partagez le rapport.')}
+                            </div>
+                        </div>
                         {epis.filter((e) => !e.remplace && joursRestants(e) < 0)
                             .length > 0 && (
                             <div
@@ -8490,10 +8632,22 @@ export default function App({
                                 ))}
                             </div>
                         )}
-                        <Btn tone="wa" onClick={versWA}>
-                            Envoyer sur WhatsApp
+                        <Label>{trText('Exporter ou partager')}</Label>
+                        <Btn tone="ghost" onClick={telechargerCSV}>
+                            {trText('Télécharger le CSV')}
                         </Btn>
-                        <Label>E-mail — copie automatique à la Direction</Label>
+                        <Btn
+                            tone="ghost"
+                            onClick={() => {
+                                navigator.clipboard.writeText(rapport());
+                                flash('Copié');
+                            }}
+                        >
+                            {trText('Copier le texte')}
+                        </Btn>
+                        <Btn tone="wa" onClick={versWA}>
+                            {trText('Partager le rapport sur WhatsApp')}
+                        </Btn>
                         <Btn
                             tone="mail"
                             onClick={() =>
@@ -8504,23 +8658,12 @@ export default function App({
                                 )
                             }
                         >
-                            Au supérieur (cc Direction)
+                            {trText('E-mail au supérieur (cc Direction)')}
                         </Btn>
                         <Btn tone="mail" onClick={() => versMail(MGMT)}>
-                            À la Direction seule
+                            {trText('E-mail à la Direction')}
                         </Btn>
-                        <Btn tone="ghost" onClick={telechargerCSV}>
-                            Télécharger le CSV
-                        </Btn>
-                        <Btn
-                            tone="ghost"
-                            onClick={() => {
-                                navigator.clipboard.writeText(rapport());
-                                flash('Copié');
-                            }}
-                        >
-                            Copier le texte
-                        </Btn>
+                        <Label>{trText('Aperçu du rapport')}</Label>
                         <pre
                             style={{
                                 background: '#fff',
@@ -8536,15 +8679,20 @@ export default function App({
                         >
                             {rapport()}
                         </pre>
-                        <NavBas />
+                        <NavBas
+                            retour={() => setVue(rapportHistorique ? 'histo' : 'accueil')}
+                            suivant={() => setVue('histo')}
+                            libelleRetour={rapportHistorique ? trText('← Rapports enregistrés') : trText('← Accueil')}
+                            libelleSuivant={trText('Rapports enregistrés →')}
+                        />
                     </>
                 )}
 
                 {vue === 'histo' && (
                     <>
-                        <Label>Rapports enregistrés</Label>
+                        <Label>{trText('Rapports enregistrés')}</Label>
                         <Btn tone="ghost" onClick={chargerHisto}>
-                            Actualiser
+                            {trText('Actualiser')}
                         </Btn>
                         {!histo.length && (
                             <div
@@ -8554,7 +8702,7 @@ export default function App({
                                     padding: 12,
                                 }}
                             >
-                                Aucun rapport enregistré.
+                                {trText('Aucun rapport enregistré.')}
                             </div>
                         )}
                         {histo.map((h) => (
@@ -8594,10 +8742,7 @@ export default function App({
                                         </div>
                                     </div>
                                     <button
-                                        onClick={() => {
-                                            setDate(h.date);
-                                            setVue('rapport');
-                                        }}
+                                        onClick={() => ouvrirRapportHistorique(h)}
                                         style={{
                                             padding: '12px 16px',
                                             background: C.laterite,

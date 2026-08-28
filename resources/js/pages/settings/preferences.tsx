@@ -4,6 +4,7 @@ import Heading from '@/components/heading';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { useI18n } from '@/lib/i18n';
 
 type LocaleOption = {
     value: 'fr' | 'en';
@@ -16,6 +17,7 @@ type Props = {
 };
 
 export default function Preferences({ locale, locales }: Props) {
+    const { t } = useI18n();
     const form = useForm({
         locale,
     });
@@ -27,13 +29,13 @@ export default function Preferences({ locale, locales }: Props) {
 
     return (
         <>
-            <Head title="Préférences" />
+            <Head title={t('preferences')} />
 
             <div className="space-y-6">
                 <Heading
                     variant="small"
-                    title="Préférences"
-                    description="Choisissez la langue de l’interface et les réglages de confort."
+                    title={t('preferences')}
+                    description={t('preferenceDescription')}
                 />
 
                 <form onSubmit={submit} className="space-y-6 rounded-2xl border bg-card p-5 shadow-sm">
@@ -42,9 +44,9 @@ export default function Preferences({ locale, locales }: Props) {
                             <Languages className="size-5" />
                         </div>
                         <div>
-                            <h2 className="text-base font-semibold">Langue de l’application</h2>
+                            <h2 className="text-base font-semibold">{t('appLanguage')}</h2>
                             <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                                Ce réglage est enregistré sur votre compte. Les textes traduits progressivement utiliseront cette langue.
+                                {t('languageSaved')}
                             </p>
                         </div>
                     </div>
@@ -74,8 +76,8 @@ export default function Preferences({ locale, locales }: Props) {
                                     </span>
                                     <span className="mt-1 block text-sm text-muted-foreground">
                                         {option.value === 'fr'
-                                            ? 'Interface principale en français.'
-                                            : 'Main interface in English.'}
+                                            ? t('mainFrench')
+                                            : t('mainEnglish')}
                                     </span>
                                 </span>
                             </label>
@@ -85,11 +87,8 @@ export default function Preferences({ locale, locales }: Props) {
 
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                         <Button type="submit" disabled={form.processing}>
-                            {form.processing ? 'Enregistrement…' : 'Enregistrer les préférences'}
+                            {form.processing ? t('saving') : t('savePreferences')}
                         </Button>
-                        <p className="text-sm text-muted-foreground">
-                            Certaines anciennes sections terrain seront traduites au fur et à mesure de leur refonte.
-                        </p>
                     </div>
                 </form>
 
@@ -99,9 +98,9 @@ export default function Preferences({ locale, locales }: Props) {
                             <WifiOff className="size-5" />
                         </div>
                         <div>
-                            <h2 className="text-base font-semibold">Mode hors ligne</h2>
+                            <h2 className="text-base font-semibold">{t('offline')}</h2>
                             <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                                Installez l’application depuis le navigateur pour l’ouvrir comme une app mobile.
+                                {t('offlineDescription')}
                                 Les pages déjà visitées restent disponibles et certaines opérations terrain sont mises en attente si le réseau tombe.
                             </p>
                             <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-muted-foreground">

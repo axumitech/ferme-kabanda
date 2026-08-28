@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { AdminLayout } from './AdminLayout';
+import { useI18n } from '@/lib/i18n';
 
 type Entry = Record<string, unknown>;
 type Report = {
@@ -124,6 +125,7 @@ const reportText = (report: Report) => {
 };
 
 export default function ReportsAdmin({ reports }: { reports: Report[] }) {
+    const { locale, tr } = useI18n();
     const [selectedId, setSelectedId] = useState<number | null>(
         reports[0]?.id || null,
     );
@@ -169,17 +171,17 @@ export default function ReportsAdmin({ reports }: { reports: Report[] }) {
         ),
     };
     const statCards = [
-        { icon: FileText, label: 'Total rapports', value: reports.length },
+        { icon: FileText, label: tr('Total rapports'), value: reports.length },
         { icon: Sprout, label: 'BT Agri', value: totals.agri },
         { icon: Tractor, label: 'BT Animal', value: totals.animal },
         {
             icon: CalendarDays,
-            label: 'Récoltes cumulées',
+            label: tr('Récoltes cumulées'),
             value: `${totals.harvest.toFixed(1)} kg`,
         },
         {
             icon: AlertTriangle,
-            label: 'Problèmes signalés',
+            label: tr('Problèmes signalés'),
             value: totals.problems,
         },
     ];
@@ -199,7 +201,7 @@ export default function ReportsAdmin({ reports }: { reports: Report[] }) {
             title="Centre des rapports"
             subtitle="Consultez toutes les saisies journalières produites par les équipes."
         >
-            <Head title="Rapports de la ferme" />
+            <Head title={tr('Rapports de la ferme')} />
             <style>{`@media print { body * { visibility: hidden } .report-print, .report-print * { visibility: visible } .report-print { position:absolute; inset:0; width:100%; box-shadow:none!important; border:0!important } }`}</style>
 
             <div className="admin-animate-in">
@@ -221,7 +223,7 @@ export default function ReportsAdmin({ reports }: { reports: Report[] }) {
                         <input
                             value={query}
                             onChange={(e) => setQuery(e.target.value)}
-                            placeholder="Nom, e-mail ou date…"
+                            placeholder={tr('Nom, e-mail ou date…')}
                         />
                     </div>
                     <div className="admin-field mb-0">
@@ -229,7 +231,7 @@ export default function ReportsAdmin({ reports }: { reports: Report[] }) {
                             value={office}
                             onChange={(e) => setOffice(e.target.value)}
                         >
-                            <option value="ALL">Tous les bureaux</option>
+                            <option value="ALL">{tr('Tous les bureaux')}</option>
                             <option value="AGRI">BT Agri</option>
                             <option value="ANI">BT Animal</option>
                         </select>
@@ -239,7 +241,7 @@ export default function ReportsAdmin({ reports }: { reports: Report[] }) {
                             value={userId}
                             onChange={(e) => setUserId(e.target.value)}
                         >
-                            <option value="ALL">Tous les utilisateurs</option>
+                            <option value="ALL">{tr('Tous les utilisateurs')}</option>
                             {users.map((user) => (
                                 <option key={user.id} value={user.id}>{user.name}</option>
                             ))}
@@ -279,14 +281,14 @@ export default function ReportsAdmin({ reports }: { reports: Report[] }) {
                                         {report.user.name}
                                     </div>
                                     <div className="mt-1.5 text-[12px] text-[#79837d]">
-                                        {report.entry_count} saisie(s)
-                                        {report.problem_count ? ` · ${report.problem_count} problème(s)` : ''}
+                                        {report.entry_count} {tr('saisie(s)')}
+                                        {report.problem_count ? ` · ${report.problem_count} ${tr('problème(s)')}` : ''}
                                     </div>
                                 </button>
                             ))}
                             {!filtered.length && (
                                 <div className="admin-empty">
-                                    Aucun rapport ne correspond aux filtres.
+                                    {tr('Aucun rapport ne correspond aux filtres.')}
                                 </div>
                             )}
                         </div>
@@ -303,13 +305,13 @@ export default function ReportsAdmin({ reports }: { reports: Report[] }) {
                                             FERME KABANDA NAWEZA
                                         </div>
                                         <h3 className="mt-2 text-2xl font-semibold">
-                                            Rapport{' '}
+                                            {tr('Rapport')}{' '}
                                             {selected.office === 'AGRI'
                                                 ? 'BT Agri'
                                                 : 'BT Animal'}
                                         </h3>
                                         <div className="mt-2 text-white/75">
-                                            Journée du {selected.date}
+                                            {tr('Journée du')} {selected.date}
                                         </div>
                                     </div>
                                     <div className="flex gap-2 print:hidden">
@@ -322,14 +324,14 @@ export default function ReportsAdmin({ reports }: { reports: Report[] }) {
                                             ) : (
                                                 <Clipboard className="size-4" />
                                             )}
-                                            {copied ? 'Copié' : 'Copier'}
+                                            {copied ? tr('Copié') : tr('Copier')}
                                         </button>
                                         <button
                                             onClick={() => window.print()}
                                             className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-semibold text-[#17352a]"
                                         >
                                             <Printer className="size-4" />{' '}
-                                            Imprimer
+                                            {tr('Imprimer')}
                                         </button>
                                     </div>
                                 </div>
@@ -337,7 +339,7 @@ export default function ReportsAdmin({ reports }: { reports: Report[] }) {
                             <div className="grid gap-3 border-b border-[#ece7de] bg-[#faf9f5] px-6 py-4 text-sm sm:grid-cols-3">
                                 <div>
                                     <span className="text-[#7a857e]">
-                                        Saisi par
+                                        {tr('Saisi par')}
                                     </span>
                                     <div className="font-semibold">
                                         {selected.user.name}
@@ -345,30 +347,30 @@ export default function ReportsAdmin({ reports }: { reports: Report[] }) {
                                 </div>
                                 <div>
                                     <span className="text-[#7a857e]">
-                                        Rédacteur terrain
+                                        {tr('Rédacteur terrain')}
                                     </span>
                                     <div className="font-semibold">
                                         {String(
                                             selected.data.redacteur ||
-                                                'Non renseigné',
+                                                tr('Non renseigné'),
                                         )}
                                     </div>
                                 </div>
                                 <div>
                                     <span className="text-[#7a857e]">
-                                        Dernière mise à jour
+                                        {tr('Dernière mise à jour')}
                                     </span>
                                     <div className="font-semibold">
                                         {new Date(
                                             selected.updated_at,
-                                        ).toLocaleString('fr-FR')}
+                                        ).toLocaleString(locale === 'en' ? 'en-US' : 'fr-FR')}
                                     </div>
                                 </div>
                             </div>
                             <div className="grid gap-3 border-b border-[#ece7de] px-6 py-4 text-sm sm:grid-cols-4">
                                 <div>
                                     <span className="text-[#7a857e]">
-                                        Météo
+                                        {tr('Météo')}
                                     </span>
                                     <div className="font-semibold">
                                         {String(selected.data.meteo || '—')}
@@ -376,7 +378,7 @@ export default function ReportsAdmin({ reports }: { reports: Report[] }) {
                                 </div>
                                 <div>
                                     <span className="text-[#7a857e]">
-                                        Pluie
+                                        {tr('Pluie')}
                                     </span>
                                     <div className="font-semibold">
                                         {selected.data.pluie
@@ -386,7 +388,7 @@ export default function ReportsAdmin({ reports }: { reports: Report[] }) {
                                 </div>
                                 <div>
                                     <span className="text-[#7a857e]">
-                                        Présents
+                                        {tr('Présents')}
                                     </span>
                                     <div className="font-semibold">
                                         {String(selected.data.presents || '—')}
@@ -394,7 +396,7 @@ export default function ReportsAdmin({ reports }: { reports: Report[] }) {
                                 </div>
                                 <div>
                                     <span className="text-[#7a857e]">
-                                        Absents
+                                        {tr('Absents')}
                                     </span>
                                     <div className="font-semibold">
                                         {String(selected.data.absents || '—')}
@@ -413,7 +415,7 @@ export default function ReportsAdmin({ reports }: { reports: Report[] }) {
                                         <section key={key}>
                                             <div className="mb-3 flex items-center justify-between border-b-2 border-[#e7e2d8] pb-2">
                                                 <h4 className="font-semibold">
-                                                    {label}
+                                                    {tr(label)}
                                                 </h4>
                                                 <span className="rounded-full bg-[#edf3ed] px-2 py-1 text-xs font-semibold text-[#27633f]">
                                                     {entries.length}
@@ -439,8 +441,7 @@ export default function ReportsAdmin({ reports }: { reports: Report[] }) {
                                     ([key]) => list(selected.data[key]).length,
                                 ) && (
                                     <div className="py-14 text-center text-sm text-[#7b857e]">
-                                        Ce rapport ne contient encore aucune
-                                        saisie détaillée.
+                                        {tr('Ce rapport ne contient encore aucune saisie détaillée.')}
                                     </div>
                                 )}
                             </div>
@@ -449,8 +450,7 @@ export default function ReportsAdmin({ reports }: { reports: Report[] }) {
                         <div className="grid min-h-96 place-items-center rounded-2xl border border-dashed border-[#cfc8ba] bg-white/50 text-center text-sm text-[#7c867f]">
                             <div>
                                 <FileText className="mx-auto mb-3 size-10 opacity-40" />
-                                Sélectionnez un rapport pour consulter son
-                                contenu.
+                                {tr('Sélectionnez un rapport pour consulter son contenu.')}
                             </div>
                         </div>
                     )}

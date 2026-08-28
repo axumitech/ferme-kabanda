@@ -38,7 +38,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['name', 'email', 'phone', 'reference_item_id', 'email_verified_at', 'password', 'is_admin', 'matricule', 'fonction', 'site_id', 'departement_id', 'actif', 'locale', 'derniere_connexion_at'])]
+#[Fillable(['name', 'email', 'phone', 'reference_item_id', 'email_verified_at', 'password', 'is_admin', 'matricule', 'fonction', 'site_id', 'departement_id', 'niveau_hierarchie', 'actif', 'locale', 'derniere_connexion_at'])]
 #[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
 class User extends Authenticatable implements PasskeyUser
 {
@@ -84,6 +84,12 @@ class User extends Authenticatable implements PasskeyUser
         return $this->hasMany(Tache::class, 'responsable_id');
     }
 
+    /** @return HasMany<TacheIntervenant, $this> */
+    public function interventions(): HasMany
+    {
+        return $this->hasMany(TacheIntervenant::class);
+    }
+
     /** @return HasMany<InventoryItem, $this> */
     public function inventoryItems(): HasMany
     {
@@ -127,6 +133,7 @@ class User extends Authenticatable implements PasskeyUser
             'is_admin' => 'boolean',
             'actif' => 'boolean',
             'locale' => 'string',
+            'niveau_hierarchie' => 'integer',
             'two_factor_confirmed_at' => 'datetime',
             'derniere_connexion_at' => 'datetime',
         ];

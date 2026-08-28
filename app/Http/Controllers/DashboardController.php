@@ -25,6 +25,7 @@ class DashboardController extends Controller
             ->when(! $user?->is_admin, fn (Builder $query): Builder => $query
                 ->where(function (Builder $query) use ($user): void {
                     $query->where('responsable_id', $user?->id)
+                        ->orWhereHas('intervenants', fn (Builder $intervenants): Builder => $intervenants->where('user_id', $user?->id))
                         ->orWhereNull('responsable_id');
                 }));
         $lowInventoryBase = Article::query()
@@ -64,7 +65,7 @@ class DashboardController extends Controller
                 'closedToday' => ClotureJournaliere::query()->whereDate('date', today())->where('verrouillee', true)->count(),
             ],
             'tasks' => $taskScope(Tache::query())
-                ->with(['responsable:id,name', 'site:id,code,nom', 'departement:id,code,nom'])
+                ->with(['responsable:id,name', 'intervenants.user:id,name', 'site:id,code,nom', 'departement:id,code,nom'])
                 ->orderByRaw(
                     'case when statut = ? and date_due < ? then 0 when statut = ? then 1 else 2 end',
                     [StatutTache::AFaire->value, today()->toDateString(), StatutTache::AFaire->value]

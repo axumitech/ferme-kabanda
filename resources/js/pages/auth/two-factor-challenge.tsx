@@ -11,8 +11,10 @@ import {
 } from '@/components/ui/input-otp';
 import { OTP_MAX_LENGTH } from '@/hooks/use-two-factor-auth';
 import { store } from '@/routes/two-factor/login';
+import { useI18n } from '@/lib/i18n';
 
 export default function TwoFactorChallenge() {
+    const { tr } = useI18n();
     const [showRecoveryInput, setShowRecoveryInput] = useState<boolean>(false);
     const [code, setCode] = useState<string>('');
 
@@ -23,20 +25,20 @@ export default function TwoFactorChallenge() {
     }>(() => {
         if (showRecoveryInput) {
             return {
-                title: 'Recovery code',
+                title: tr('Code de récupération'),
                 description:
-                    'Please confirm access to your account by entering one of your emergency recovery codes.',
-                toggleText: 'login using an authentication code',
+                    tr('Confirmez l’accès à votre compte en saisissant l’un de vos codes de récupération d’urgence.'),
+                toggleText: tr('Se connecter avec un code d’authentification'),
             };
         }
 
         return {
-            title: 'Authentication code',
+            title: tr('Code d’authentification'),
             description:
-                'Enter the authentication code provided by your authenticator application.',
-            toggleText: 'login using a recovery code',
+                tr('Saisissez le code fourni par votre application d’authentification.'),
+            toggleText: tr('Se connecter avec un code de récupération'),
         };
-    }, [showRecoveryInput]);
+    }, [showRecoveryInput, tr]);
 
     setLayoutProps({
         title: authConfigContent.title,
@@ -51,7 +53,7 @@ export default function TwoFactorChallenge() {
 
     return (
         <>
-            <Head title="Two-factor authentication" />
+            <Head title={tr('Authentification à deux facteurs')} />
 
             <div className="space-y-6">
                 <Form
@@ -67,7 +69,7 @@ export default function TwoFactorChallenge() {
                                     <Input
                                         name="recovery_code"
                                         type="text"
-                                        placeholder="Enter recovery code"
+                                        placeholder={tr('Saisissez le code de récupération')}
                                         autoFocus={showRecoveryInput}
                                         required
                                     />
@@ -109,11 +111,11 @@ export default function TwoFactorChallenge() {
                                 className="w-full"
                                 disabled={processing}
                             >
-                                Continue
+                                {tr('Continuer')}
                             </Button>
 
                             <div className="text-center text-sm text-muted-foreground">
-                                <span>or you can </span>
+                                <span>{tr('ou vous pouvez')} </span>
                                 <button
                                     type="button"
                                     className="cursor-pointer text-foreground underline decoration-neutral-300 underline-offset-4 transition-colors duration-300 ease-out hover:decoration-current! dark:decoration-neutral-500"
