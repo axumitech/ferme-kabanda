@@ -65,7 +65,8 @@ window.storage = {
                   ? { stocks: JSON.parse(value) }
                   : { assignments: JSON.parse(value) }
             : { value };
-        const endpoint = normalizedEndpoint || `/farm-data/${encodeURIComponent(key)}`;
+        const endpoint =
+            normalizedEndpoint || `/farm-data/${encodeURIComponent(key)}`;
 
         if (!navigator.onLine) {
             offlineQueue.enqueue({
@@ -1235,7 +1236,14 @@ const C = {
     amber: '#D68A2D',
     ani: '#76502B',
 };
-const FONTS = `body{margin:0}*{box-sizing:border-box}`;
+const FONTS = `
+body{margin:0}
+*{box-sizing:border-box}
+@media (max-width: 480px){
+  .farm-brand-title{font-size:10px!important;letter-spacing:1.5px!important}
+  .farm-brand-subtitle{display:none}
+  .farm-header-actions button{padding:7px 9px!important;font-size:11px!important}
+}`;
 const MGMT = 'etskabanda@gmail.com';
 
 const Label = ({ children }) => (
@@ -2429,8 +2437,7 @@ export default function App({
     const [lg, setLg] = useState({ nb: '', cap: '', type: '', rangs: '2' });
 
     const typeDe = (atelier) => TYPE_ATELIER(atelier);
-    const jours = (a, b) =>
-        Math.round((new Date(b) - new Date(a)) / 86400000);
+    const jours = (a, b) => Math.round((new Date(b) - new Date(a)) / 86400000);
     const plusJours = (d, n) => {
         const x = new Date(d);
         x.setDate(x.getDate() + n);
@@ -2438,7 +2445,7 @@ export default function App({
     };
     const nomTruie = (t) => `${t.couleur === 'Verte' ? 'V' : 'J'}-${t.serie}`;
     const cycleEnCours = (t) =>
-        ((t.cycles || []).filter((c) => !c.sevrage).slice(-1)[0]) || null;
+        (t.cycles || []).filter((c) => !c.sevrage).slice(-1)[0] || null;
     const statutTruie = (t) => {
         if (t.reforme) return { t: 'RÉFORMÉE', c: '#8A8A80' };
         const c = cycleEnCours(t);
@@ -2516,7 +2523,8 @@ export default function App({
                 !truies.some(
                     (t) =>
                         nomTruie(t) === a.code ||
-                        String(t.serie) === String(a.code).replace(/^[VJ]-/, ''),
+                        String(t.serie) ===
+                            String(a.code).replace(/^[VJ]-/, ''),
                 ),
         );
 
@@ -2545,13 +2553,24 @@ export default function App({
     };
     const retirerLoge = async (atelier, num) => {
         if (occupationLoge(atelier, num) > 0)
-            return flash(`${num} n'est pas vide — déplacez d'abord les animaux`);
-        if (!(await confirmer('Supprimer la loge', `Supprimer ${num} ?`, 'Supprimer')))
+            return flash(
+                `${num} n'est pas vide — déplacez d'abord les animaux`,
+            );
+        if (
+            !(await confirmer(
+                'Supprimer la loge',
+                `Supprimer ${num} ?`,
+                'Supprimer',
+            ))
+        )
             return;
         const cfg = loges[atelier] || {};
         await sauverLoges({
             ...loges,
-            [atelier]: { ...cfg, liste: logesDe(atelier).filter((l) => l.n !== num) },
+            [atelier]: {
+                ...cfg,
+                liste: logesDe(atelier).filter((l) => l.n !== num),
+            },
         });
         setLogeOuverte('');
     };
@@ -2608,7 +2627,9 @@ export default function App({
             loge: an.loge,
             notes: '',
         });
-        flash(`Enregistré${an.loge ? ` en ${an.loge}` : ' — aucune loge attribuée'}`);
+        flash(
+            `Enregistré${an.loge ? ` en ${an.loge}` : ' — aucune loge attribuée'}`,
+        );
     };
     const deplacerAnimal = async (animal, vers) => {
         if (!vers) return;
@@ -2633,7 +2654,12 @@ export default function App({
                           loge: vers,
                           mouvements: [
                               ...(x.mouvements || []),
-                              { d: date, de: x.loge || '—', vers, par: redacteur || '—' },
+                              {
+                                  d: date,
+                                  de: x.loge || '—',
+                                  vers,
+                                  par: redacteur || '—',
+                              },
                           ],
                       }
                     : x,
@@ -2663,7 +2689,12 @@ export default function App({
                     ? {
                           ...x,
                           statut: 'Sorti',
-                          sortie: { date, motif, valeur, par: redacteur || '—' },
+                          sortie: {
+                              date,
+                              motif,
+                              valeur,
+                              par: redacteur || '—',
+                          },
                       }
                     : x,
             ),
@@ -2673,11 +2704,13 @@ export default function App({
     };
 
     const creerTruie = async () => {
-        if (!tr.serie) return flash('Le numéro de série de la boucle est obligatoire');
+        if (!tr.serie)
+            return flash('Le numéro de série de la boucle est obligatoire');
         if (
             truies.some(
                 (t) =>
-                    String(t.serie) === String(tr.serie) && t.couleur === tr.couleur,
+                    String(t.serie) === String(tr.serie) &&
+                    t.couleur === tr.couleur,
             )
         )
             return flash(
@@ -2690,7 +2723,8 @@ export default function App({
             id: `${Date.now()}`,
             ...tr,
             ligne: tr.couleur === 'Verte' ? 'Pure' : 'Terminale',
-            verratInterdit: (COHORTES.find((x) => x.c === tr.cohorte) || {}).pere || '',
+            verratInterdit:
+                (COHORTES.find((x) => x.c === tr.cohorte) || {}).pere || '',
             cree: date,
             creePar: redacteur || '—',
             cycles: [],
@@ -2715,7 +2749,9 @@ export default function App({
         if (!cy.saillie || !cy.verrat)
             return flash('Date de saillie et verrat obligatoires');
         if (cycleEnCours(t))
-            return flash('Un cycle est déjà ouvert — enregistrez la mise bas puis le sevrage');
+            return flash(
+                'Un cycle est déjà ouvert — enregistrez la mise bas puis le sevrage',
+            );
         if (t.verratInterdit && cy.verrat === t.verratInterdit)
             return flash(
                 `SAILLIE INTERDITE — ${nomTruie(t)} porte la cohorte ${t.cohorte}. Choisissez un autre verrat.`,
@@ -2735,7 +2771,10 @@ export default function App({
         );
         setCy({ ...cy, saillie: '', verrat: '', notes: '' });
         log(`Saillie ${nomTruie(t)} × ${cy.verrat}`);
-        flash(`Saillie enregistrée — mise bas prévue le ${c.misBasPrevue}`, 4200);
+        flash(
+            `Saillie enregistrée — mise bas prévue le ${c.misBasPrevue}`,
+            4200,
+        );
     };
     const enregistrerMiseBas = async (t) => {
         const c = cycleEnCours(t);
@@ -2756,13 +2795,29 @@ export default function App({
         await sauverTruies(
             truies.map((x) =>
                 x.id === t.id
-                    ? { ...x, cycles: (x.cycles || []).map((z) => (z.n === c.n ? maj : z)) }
+                    ? {
+                          ...x,
+                          cycles: (x.cycles || []).map((z) =>
+                              z.n === c.n ? maj : z,
+                          ),
+                      }
                     : x,
             ),
         );
-        setCy({ ...cy, misBas: '', nesTotal: '', nesVivants: '', mortNes: '', momifies: '', poidsPortee: '' });
+        setCy({
+            ...cy,
+            misBas: '',
+            nesTotal: '',
+            nesVivants: '',
+            mortNes: '',
+            momifies: '',
+            poidsPortee: '',
+        });
         log(`Mise bas ${nomTruie(t)} — ${cy.nesVivants} nés vivants`);
-        flash(`Mise bas enregistrée — sevrage prévu le ${maj.sevragePrevu}`, 4500);
+        flash(
+            `Mise bas enregistrée — sevrage prévu le ${maj.sevragePrevu}`,
+            4500,
+        );
     };
     const enregistrerSevrage = async (t) => {
         const c = cycleEnCours(t);
@@ -2809,7 +2864,12 @@ export default function App({
         await sauverTruies(
             truies.map((x) =>
                 x.id === t.id
-                    ? { ...x, cycles: (x.cycles || []).map((z) => (z.n === c.n ? maj : z)) }
+                    ? {
+                          ...x,
+                          cycles: (x.cycles || []).map((z) =>
+                              z.n === c.n ? maj : z,
+                          ),
+                      }
                     : x,
             ),
         );
@@ -2829,7 +2889,12 @@ export default function App({
             return;
         await sauverTruies(
             truies.map((x) =>
-                x.id === t.id ? { ...x, reforme: { date, motif: rf, par: redacteur || '—' } } : x,
+                x.id === t.id
+                    ? {
+                          ...x,
+                          reforme: { date, motif: rf, par: redacteur || '—' },
+                      }
+                    : x,
             ),
         );
         setRf('');
@@ -3335,7 +3400,8 @@ export default function App({
             );
             const ateliersAvecRegistre = ateliers.filter(
                 (atelier) =>
-                    effectifRegistre(atelier) > 0 || logesDe(atelier).length > 0,
+                    effectifRegistre(atelier) > 0 ||
+                    logesDe(atelier).length > 0,
             );
             if (ateliersAvecRegistre.length)
                 bloc(
@@ -3724,8 +3790,14 @@ export default function App({
         SECTIONS.some(([section]) => section === vue);
     const retourContexte = () =>
         setVue(bureau === 'AGRI' ? 'parcelle' : 'atelier');
-    const NavBas = ({ retour, suivant, libelleRetour, libelleSuivant } = {}) => {
-        const retourEffectif = retour ?? (estSaisieDeLieu ? retourContexte : null);
+    const NavBas = ({
+        retour,
+        suivant,
+        libelleRetour,
+        libelleSuivant,
+    } = {}) => {
+        const retourEffectif =
+            retour ?? (estSaisieDeLieu ? retourContexte : null);
         const retourLabel =
             libelleRetour ??
             (estSaisieDeLieu
@@ -3738,52 +3810,64 @@ export default function App({
         const suivantLabel = libelleSuivant ?? trText('Suivant →');
 
         return (
-        <div
-            style={{
-                display: 'flex',
-                gap: 10,
-                marginTop: 22,
-                paddingTop: 16,
-                borderTop: `2px solid ${C.line}`,
-            }}
-        >
-            <button
-                onClick={() => retourEffectif ? retourEffectif() : setVue(ORDRE[Math.max(0, idx - 1)])}
-                disabled={!retourEffectif && idx <= 0}
+            <div
                 style={{
-                    flex: 1,
-                    padding: 16,
-                    fontSize: 16,
-                    fontWeight: 700,
-                    borderRadius: 4,
-                    border: `2px solid ${C.line}`,
-                    background: '#fff',
-                    color: !retourEffectif && idx <= 0 ? '#bbb' : C.ink,
-                    fontFamily: 'Oswald, sans-serif',
-                    cursor: !retourEffectif && idx <= 0 ? 'default' : 'pointer',
+                    display: 'flex',
+                    gap: 10,
+                    marginTop: 22,
+                    paddingTop: 16,
+                    borderTop: `2px solid ${C.line}`,
                 }}
             >
-                {retourLabel}
-            </button>
-            <button
-                onClick={() => suivant ? suivant() : setVue(ORDRE[Math.min(ORDRE.length - 1, idx + 1)])}
-                disabled={!suivant && idx >= ORDRE.length - 1}
-                style={{
-                    flex: 1,
-                    padding: 16,
-                    fontSize: 16,
-                    fontWeight: 700,
-                    borderRadius: 4,
-                    border: 'none',
-                    background: !suivant && idx >= ORDRE.length - 1 ? '#ccc' : C.laterite,
-                    color: '#fff',
-                    fontFamily: 'Oswald, sans-serif',
-                    cursor: 'pointer',
-                }}
-            >
-                {suivantLabel}
-            </button>
-        </div>
+                <button
+                    onClick={() =>
+                        retourEffectif
+                            ? retourEffectif()
+                            : setVue(ORDRE[Math.max(0, idx - 1)])
+                    }
+                    disabled={!retourEffectif && idx <= 0}
+                    style={{
+                        flex: 1,
+                        padding: 16,
+                        fontSize: 16,
+                        fontWeight: 700,
+                        borderRadius: 4,
+                        border: `2px solid ${C.line}`,
+                        background: '#fff',
+                        color: !retourEffectif && idx <= 0 ? '#bbb' : C.ink,
+                        fontFamily: 'Oswald, sans-serif',
+                        cursor:
+                            !retourEffectif && idx <= 0 ? 'default' : 'pointer',
+                    }}
+                >
+                    {retourLabel}
+                </button>
+                <button
+                    onClick={() =>
+                        suivant
+                            ? suivant()
+                            : setVue(ORDRE[Math.min(ORDRE.length - 1, idx + 1)])
+                    }
+                    disabled={!suivant && idx >= ORDRE.length - 1}
+                    style={{
+                        flex: 1,
+                        padding: 16,
+                        fontSize: 16,
+                        fontWeight: 700,
+                        borderRadius: 4,
+                        border: 'none',
+                        background:
+                            !suivant && idx >= ORDRE.length - 1
+                                ? '#ccc'
+                                : C.laterite,
+                        color: '#fff',
+                        fontFamily: 'Oswald, sans-serif',
+                        cursor: 'pointer',
+                    }}
+                >
+                    {suivantLabel}
+                </button>
+            </div>
         );
     };
 
@@ -3824,8 +3908,7 @@ export default function App({
                             <b style={{ fontSize: 20 }}>
                                 {effectifRegistre(lieu)}
                             </b>{' '}
-                            au registre · {placesLibres(lieu)} place(s)
-                            libre(s)
+                            au registre · {placesLibres(lieu)} place(s) libre(s)
                             {DETAIL_BATI[lieu.replace(' — K1', '')] && (
                                 <>
                                     <br />
@@ -3904,7 +3987,9 @@ export default function App({
                 )}
                 {dues.length > 0 && (
                     <div style={{ marginBottom: 16 }}>
-                        <Label>{trText("Tâches dues d'après le calendrier")}</Label>
+                        <Label>
+                            {trText("Tâches dues d'après le calendrier")}
+                        </Label>
                         {dues.map((x, i) => {
                             const col =
                                 x.statut === 'EN RETARD'
@@ -4016,6 +4101,7 @@ export default function App({
                             />
                             <div className="farm-brand-copy">
                                 <div
+                                    className="farm-brand-title"
                                     style={{
                                         fontFamily: 'Oswald, sans-serif',
                                         fontSize: 11,
@@ -4023,16 +4109,17 @@ export default function App({
                                         color: '#C9DCCF',
                                     }}
                                 >
-                                    FERME KABANDA NAWEZA
+                                    FERME KABANDA
                                 </div>
                                 <div
+                                    className="farm-brand-subtitle"
                                     style={{
                                         color: '#fff',
                                         fontSize: 13,
                                         marginTop: 3,
                                     }}
                                 >
-                                    Bonjour, {auth?.user?.name || 'Utilisateur'}
+                                    Plateforme de gestion
                                 </div>
                             </div>
                         </div>
@@ -4463,7 +4550,13 @@ export default function App({
                             <Btn tone="ghost" onClick={() => setVue('jour')}>
                                 {trText('Journée')}
                             </Btn>
-                            <Btn tone="ghost" onClick={() => { setFormulaireOuvert(null); setVue('freq'); }}>
+                            <Btn
+                                tone="ghost"
+                                onClick={() => {
+                                    setFormulaireOuvert(null);
+                                    setVue('freq');
+                                }}
+                            >
                                 {trText('Formulaires')}
                             </Btn>
                         </div>
@@ -4497,7 +4590,13 @@ export default function App({
                             </Btn>
                         </div>
                         <div style={{ display: 'flex', gap: 10 }}>
-                            <Btn tone="ghost" onClick={() => { setRapportHistorique(false); setVue('rapport'); }}>
+                            <Btn
+                                tone="ghost"
+                                onClick={() => {
+                                    setRapportHistorique(false);
+                                    setVue('rapport');
+                                }}
+                            >
                                 {trText('Rapport')}
                             </Btn>
                             <Btn tone="ghost" onClick={() => setVue('histo')}>
@@ -4578,7 +4677,9 @@ export default function App({
                                             {avertRotation(lieu, nc.culture)}
                                         </div>
                                     )}
-                                <Label>{trText('Date de plantation (J0)')}</Label>
+                                <Label>
+                                    {trText('Date de plantation (J0)')}
+                                </Label>
                                 <input
                                     type="date"
                                     value={nc.j0}
@@ -4763,7 +4864,9 @@ export default function App({
                             setUnite={(u) => setTv({ ...tv, unite: u })}
                             unites={unitesPour(tv.tache)}
                         />
-                        <Label>{trText('Qui a travaillé — plusieurs possibles')}</Label>
+                        <Label>
+                            {trText('Qui a travaillé — plusieurs possibles')}
+                        </Label>
                         <MultiSel
                             options={AGENTS}
                             selected={tv.qui}
@@ -4851,7 +4954,9 @@ export default function App({
                                 placeholder="Choisir le lieu"
                             />
                         )}
-                        <Label>{trText('Produits — plusieurs si mélange en cuve')}</Label>
+                        <Label>
+                            {trText('Produits — plusieurs si mélange en cuve')}
+                        </Label>
                         <MultiSel
                             options={produitsCatalogue}
                             selected={pr.prods}
@@ -5034,7 +5139,9 @@ export default function App({
                             value={ea.minutes}
                             onChange={(v) => setEa({ ...ea, minutes: v })}
                         />
-                        <Label>{trText('Test du doigt — humide à 10 cm ?')}</Label>
+                        <Label>
+                            {trText('Test du doigt — humide à 10 cm ?')}
+                        </Label>
                         <Sel
                             value={ea.doigt}
                             onChange={(v) => setEa({ ...ea, doigt: v })}
@@ -5327,12 +5434,9 @@ export default function App({
                                                 }}
                                             >
                                                 Comptage du jour :{' '}
-                                                <b>{dernierComptage(lieu)}</b>{' '}
-                                                · registre :{' '}
-                                                <b>
-                                                    {effectifRegistre(lieu)}
-                                                </b>
-                                                .
+                                                <b>{dernierComptage(lieu)}</b> ·
+                                                registre :{' '}
+                                                <b>{effectifRegistre(lieu)}</b>.
                                             </div>
                                         </div>
                                     )}
@@ -5408,8 +5512,7 @@ export default function App({
                                 </div>
 
                                 <Label>
-                                    Plan du bâtiment —{' '}
-                                    {MOT_LOGE[typeDe(lieu)]}s
+                                    Plan du bâtiment — {MOT_LOGE[typeDe(lieu)]}s
                                 </Label>
                                 {!logesDe(lieu).length && (
                                     <div
@@ -5536,7 +5639,8 @@ export default function App({
                                                             marginTop: 5,
                                                         }}
                                                     >
-                                                        · {a.code || a.categorie}{' '}
+                                                        ·{' '}
+                                                        {a.code || a.categorie}{' '}
                                                         × {a.nb}
                                                     </div>
                                                 ))
@@ -5623,7 +5727,10 @@ export default function App({
                                 <Btn onClick={() => genererLoges(lieu)}>
                                     Générer les emplacements
                                 </Btn>
-                                <Btn tone="ghost" onClick={() => setVue('animaux')}>
+                                <Btn
+                                    tone="ghost"
+                                    onClick={() => setVue('animaux')}
+                                >
                                     Registre animal
                                 </Btn>
                             </>
@@ -5718,9 +5825,7 @@ export default function App({
                                 />
                                 <Txt
                                     value={an.notes}
-                                    onChange={(v) =>
-                                        setAn({ ...an, notes: v })
-                                    }
+                                    onChange={(v) => setAn({ ...an, notes: v })}
                                     lines={2}
                                     placeholder="Observation facultative"
                                 />
@@ -5844,9 +5949,7 @@ export default function App({
                                     return (
                                         <Btn
                                             tone="ghost"
-                                            onClick={() =>
-                                                setTruieOuverte('')
-                                            }
+                                            onClick={() => setTruieOuverte('')}
                                         >
                                             ← Toutes les truies
                                         </Btn>
@@ -5884,7 +5987,8 @@ export default function App({
                                             >
                                                 {st.t} · ligne {t.ligne} ·
                                                 cohorte {t.cohorte || '—'} ·{' '}
-                                                {t.atelier || 'atelier non précisé'}
+                                                {t.atelier ||
+                                                    'atelier non précisé'}
                                             </div>
                                         </div>
                                         <div
@@ -6031,8 +6135,8 @@ export default function App({
                                                     onChange={(e) =>
                                                         setCy({
                                                             ...cy,
-                                                            misBas:
-                                                                e.target.value,
+                                                            misBas: e.target
+                                                                .value,
                                                         })
                                                     }
                                                     style={{
@@ -6191,7 +6295,9 @@ export default function App({
                                         )}
                                         {!t.reforme && (
                                             <>
-                                                <Label>Réformer cette truie</Label>
+                                                <Label>
+                                                    Réformer cette truie
+                                                </Label>
                                                 <Sel
                                                     value={rf}
                                                     onChange={setRf}
@@ -6359,9 +6465,7 @@ export default function App({
                                 />
                                 <Txt
                                     value={tr.serie}
-                                    onChange={(v) =>
-                                        setTr({ ...tr, serie: v })
-                                    }
+                                    onChange={(v) => setTr({ ...tr, serie: v })}
                                     placeholder="Numéro de série, ex : 203"
                                 />
                                 {tr.couleur === 'Verte' && (
@@ -6409,9 +6513,7 @@ export default function App({
                                 />
                                 <Sel
                                     value={tr.pere}
-                                    onChange={(v) =>
-                                        setTr({ ...tr, pere: v })
-                                    }
+                                    onChange={(v) => setTr({ ...tr, pere: v })}
                                     options={VERRATS}
                                     placeholder="Père"
                                 />
@@ -6423,9 +6525,7 @@ export default function App({
                                     options={ATELIERS_PORC}
                                     placeholder="Atelier"
                                 />
-                                <Btn onClick={creerTruie}>
-                                    Créer la fiche
-                                </Btn>
+                                <Btn onClick={creerTruie}>Créer la fiche</Btn>
                             </>
                         )}
                         <NavBas />
@@ -6601,7 +6701,9 @@ export default function App({
                             value={al.kg}
                             onChange={(v) => setAl({ ...al, kg: v })}
                         />
-                        <Label>{trText('Abreuvoirs propres et pleins ?')}</Label>
+                        <Label>
+                            {trText('Abreuvoirs propres et pleins ?')}
+                        </Label>
                         <Sel
                             value={al.eau}
                             onChange={(v) => setAl({ ...al, eau: v })}
@@ -7195,7 +7297,9 @@ export default function App({
 
                                 {rq.type === 'STK' && (
                                     <>
-                                        <Label>{trText('Article à sortir')}</Label>
+                                        <Label>
+                                            {trText('Article à sortir')}
+                                        </Label>
                                         <Sel
                                             value={rq.article}
                                             onChange={(v) =>
@@ -7233,7 +7337,9 @@ export default function App({
                                                     </div>
                                                 ) : null;
                                             })()}
-                                        <Label>{trText('Quantité demandée')}</Label>
+                                        <Label>
+                                            {trText('Quantité demandée')}
+                                        </Label>
                                         <Compteur
                                             value={rq.qte}
                                             onChange={(v) =>
@@ -7245,7 +7351,9 @@ export default function App({
 
                                 {rq.type === 'CSH' && (
                                     <>
-                                        <Label>{trText('Montant demandé (USD)')}</Label>
+                                        <Label>
+                                            {trText('Montant demandé (USD)')}
+                                        </Label>
                                         <Compteur
                                             value={rq.montant}
                                             onChange={(v) =>
@@ -7258,7 +7366,9 @@ export default function App({
                                 {rq.type === 'NEW' && (
                                     <>
                                         <Label>
-                                            {trText('Catégorie du nouvel article')}
+                                            {trText(
+                                                'Catégorie du nouvel article',
+                                            )}
                                         </Label>
                                         <Sel
                                             value={rq.nouvCat}
@@ -7293,7 +7403,9 @@ export default function App({
                                             }
                                         />
                                         <Label>
-                                            {trText('Prix unitaire estimé (USD)')}
+                                            {trText(
+                                                'Prix unitaire estimé (USD)',
+                                            )}
                                         </Label>
                                         <Compteur
                                             value={rq.nouvPu}
@@ -7552,7 +7664,9 @@ export default function App({
                 {vue === 'maint' && (
                     <>
                         <Label>
-                            {trText('Maintenance — parc matériel et bons de travail')}
+                            {trText(
+                                'Maintenance — parc matériel et bons de travail',
+                            )}
                         </Label>
                         {entretiensDus().length > 0 && (
                             <div
@@ -7663,7 +7777,9 @@ export default function App({
                                 <b>{numeroBT(bt.metier.split(' —')[0])}</b>
                             </div>
                         )}
-                        <Label>{trText('Description du problème ou des travaux')}</Label>
+                        <Label>
+                            {trText('Description du problème ou des travaux')}
+                        </Label>
                         <Txt
                             value={bt.desc}
                             onChange={(v) => setBt({ ...bt, desc: v })}
@@ -7680,7 +7796,9 @@ export default function App({
 
                         {bt.metier && METIERS[bt.metier.split(' —')[0]] && (
                             <>
-                                <Label>{trText('Détails propres au métier')}</Label>
+                                <Label>
+                                    {trText('Détails propres au métier')}
+                                </Label>
                                 {METIERS[bt.metier.split(' —')[0]].champs.map(
                                     (c) => (
                                         <div
@@ -7725,7 +7843,9 @@ export default function App({
                             value={bt.cout}
                             onChange={(v) => setBt({ ...bt, cout: v })}
                         />
-                        <Btn onClick={creerBT}>{trText('Créer le bon de travail')}</Btn>
+                        <Btn onClick={creerBT}>
+                            {trText('Créer le bon de travail')}
+                        </Btn>
                         <div
                             style={{
                                 fontSize: 13.5,
@@ -7909,7 +8029,9 @@ export default function App({
 
                 {vue === 'epi' && (
                     <>
-                        <Label>{trText('Équipements de protection individuelle')}</Label>
+                        <Label>
+                            {trText('Équipements de protection individuelle')}
+                        </Label>
                         {(() => {
                             const actifs = epis.filter((e) => !e.remplace);
                             const exp = actifs.filter(
@@ -8047,7 +8169,9 @@ export default function App({
                                 </div>
                             )}
 
-                        <Btn onClick={remettreEpi}>{trText('Enregistrer la remise')}</Btn>
+                        <Btn onClick={remettreEpi}>
+                            {trText('Enregistrer la remise')}
+                        </Btn>
 
                         <Label>{trText('Dotations en cours')}</Label>
                         {!epis.filter((e) => !e.remplace).length && (
@@ -8144,7 +8268,9 @@ export default function App({
 
                         {epis.some((e) => e.remplace) && (
                             <>
-                                <Label>{trText('Historique des remplacements')}</Label>
+                                <Label>
+                                    {trText('Historique des remplacements')}
+                                </Label>
                                 {epis
                                     .filter((e) => e.remplace)
                                     .slice(0, 20)
@@ -8300,142 +8426,177 @@ export default function App({
                                         marginBottom: 14,
                                     }}
                                 >
-                                    Choisissez un formulaire. Vous ne verrez qu’une fiche à la fois,
-                                    puis reviendrez ici sans perdre votre saisie.
+                                    Choisissez un formulaire. Vous ne verrez
+                                    qu’une fiche à la fois, puis reviendrez ici
+                                    sans perdre votre saisie.
                                 </div>
-                                {Object.entries(RECUR[bureau]).map(([freq, items]) => {
-                                    const f = formFreq.find((x) => x.freq === freq) || { coches: [] };
-                                    return (
-                                        <button
-                                            key={freq}
-                                            type="button"
-                                            onClick={() => setFormulaireOuvert(freq)}
+                                {Object.entries(RECUR[bureau]).map(
+                                    ([freq, items]) => {
+                                        const f = formFreq.find(
+                                            (x) => x.freq === freq,
+                                        ) || { coches: [] };
+                                        return (
+                                            <button
+                                                key={freq}
+                                                type="button"
+                                                onClick={() =>
+                                                    setFormulaireOuvert(freq)
+                                                }
+                                                style={{
+                                                    display: 'flex',
+                                                    width: '100%',
+                                                    justifyContent:
+                                                        'space-between',
+                                                    alignItems: 'center',
+                                                    marginBottom: 10,
+                                                    padding: '16px 14px',
+                                                    background: '#fff',
+                                                    border: `1px solid ${C.line}`,
+                                                    borderRadius: 4,
+                                                    color: C.ink,
+                                                    cursor: 'pointer',
+                                                    fontFamily:
+                                                        'Oswald, sans-serif',
+                                                    fontSize: 16,
+                                                    fontWeight: 700,
+                                                }}
+                                            >
+                                                <span>{freq}</span>
+                                                <span
+                                                    style={{
+                                                        color: C.green2,
+                                                        fontSize: 14,
+                                                    }}
+                                                >
+                                                    {f.coches.length}/
+                                                    {items.length} · Ouvrir →
+                                                </span>
+                                            </button>
+                                        );
+                                    },
+                                )}
+                            </>
+                        )}
+                        {Object.entries(RECUR[bureau])
+                            .filter(([freq]) => freq === formulaireOuvert)
+                            .map(([freq, items]) => {
+                                const f = formFreq.find(
+                                    (x) => x.freq === freq,
+                                ) || {
+                                    coches: [],
+                                };
+                                const toggle = (it) => {
+                                    const c = f.coches.includes(it)
+                                        ? f.coches.filter((x) => x !== it)
+                                        : [...f.coches, it];
+                                    const n = [
+                                        ...formFreq.filter(
+                                            (x) => x.freq !== freq,
+                                        ),
+                                        {
+                                            freq,
+                                            coches: c,
+                                            faits: c.length,
+                                            total: items.length,
+                                        },
+                                    ];
+                                    setFormFreq(n);
+                                    sauver({ formFreq: n });
+                                };
+                                return (
+                                    <div
+                                        key={freq}
+                                        style={{ marginBottom: 18 }}
+                                    >
+                                        <div
                                             style={{
-                                                display: 'flex',
-                                                width: '100%',
-                                                justifyContent: 'space-between',
-                                                alignItems: 'center',
-                                                marginBottom: 10,
-                                                padding: '16px 14px',
-                                                background: '#fff',
-                                                border: `1px solid ${C.line}`,
-                                                borderRadius: 4,
-                                                color: C.ink,
-                                                cursor: 'pointer',
-                                                fontFamily: 'Oswald, sans-serif',
+                                                background: ACC,
+                                                color: '#fff',
+                                                padding: '10px 14px',
+                                                borderRadius: '4px 4px 0 0',
+                                                fontFamily:
+                                                    'Oswald, sans-serif',
                                                 fontSize: 16,
                                                 fontWeight: 700,
+                                                display: 'flex',
+                                                justifyContent: 'space-between',
                                             }}
                                         >
                                             <span>{freq}</span>
-                                            <span style={{ color: C.green2, fontSize: 14 }}>
-                                                {f.coches.length}/{items.length} · Ouvrir →
+                                            <span>
+                                                {f.coches.length}/{items.length}
                                             </span>
-                                        </button>
-                                    );
-                                })}
-                            </>
-                        )}
-                        {Object.entries(RECUR[bureau]).filter(([freq]) => freq === formulaireOuvert).map(([freq, items]) => {
-                            const f = formFreq.find((x) => x.freq === freq) || {
-                                coches: [],
-                            };
-                            const toggle = (it) => {
-                                const c = f.coches.includes(it)
-                                    ? f.coches.filter((x) => x !== it)
-                                    : [...f.coches, it];
-                                const n = [
-                                    ...formFreq.filter((x) => x.freq !== freq),
-                                    {
-                                        freq,
-                                        coches: c,
-                                        faits: c.length,
-                                        total: items.length,
-                                    },
-                                ];
-                                setFormFreq(n);
-                                sauver({ formFreq: n });
-                            };
-                            return (
-                                <div key={freq} style={{ marginBottom: 18 }}>
-                                    <div
-                                        style={{
-                                            background: ACC,
-                                            color: '#fff',
-                                            padding: '10px 14px',
-                                            borderRadius: '4px 4px 0 0',
-                                            fontFamily: 'Oswald, sans-serif',
-                                            fontSize: 16,
-                                            fontWeight: 700,
-                                            display: 'flex',
-                                            justifyContent: 'space-between',
-                                        }}
-                                    >
-                                        <span>{freq}</span>
-                                        <span>
-                                            {f.coches.length}/{items.length}
-                                        </span>
-                                    </div>
-                                    <div
-                                        style={{
-                                            background: '#fff',
-                                            border: `1px solid ${C.line}`,
-                                            borderTop: 'none',
-                                            borderRadius: '0 0 4px 4px',
-                                            padding: 6,
-                                        }}
-                                    >
-                                        {items.map((it) => {
-                                            const on = f.coches.includes(it);
-                                            return (
-                                                <button
-                                                    key={it}
-                                                    onClick={() => toggle(it)}
-                                                    style={{
-                                                        display: 'block',
-                                                        width: '100%',
-                                                        textAlign: 'left',
-                                                        padding: '12px 10px',
-                                                        background: on
-                                                            ? '#EAF3EC'
-                                                            : 'transparent',
-                                                        border: 'none',
-                                                        cursor: 'pointer',
-                                                        borderBottom: `1px solid ${C.line}`,
-                                                        fontSize: 15,
-                                                        lineHeight: 1.4,
-                                                        color: C.ink,
-                                                    }}
-                                                >
-                                                    <b
+                                        </div>
+                                        <div
+                                            style={{
+                                                background: '#fff',
+                                                border: `1px solid ${C.line}`,
+                                                borderTop: 'none',
+                                                borderRadius: '0 0 4px 4px',
+                                                padding: 6,
+                                            }}
+                                        >
+                                            {items.map((it) => {
+                                                const on =
+                                                    f.coches.includes(it);
+                                                return (
+                                                    <button
+                                                        key={it}
+                                                        onClick={() =>
+                                                            toggle(it)
+                                                        }
                                                         style={{
-                                                            color: on
-                                                                ? C.green2
-                                                                : '#bbb',
-                                                            marginRight: 8,
+                                                            display: 'block',
+                                                            width: '100%',
+                                                            textAlign: 'left',
+                                                            padding:
+                                                                '12px 10px',
+                                                            background: on
+                                                                ? '#EAF3EC'
+                                                                : 'transparent',
+                                                            border: 'none',
+                                                            cursor: 'pointer',
+                                                            borderBottom: `1px solid ${C.line}`,
+                                                            fontSize: 15,
+                                                            lineHeight: 1.4,
+                                                            color: C.ink,
                                                         }}
                                                     >
-                                                        {on ? '☑' : '☐'}
-                                                    </b>
-                                                    {it}
-                                                </button>
-                                            );
-                                        })}
+                                                        <b
+                                                            style={{
+                                                                color: on
+                                                                    ? C.green2
+                                                                    : '#bbb',
+                                                                marginRight: 8,
+                                                            }}
+                                                        >
+                                                            {on ? '☑' : '☐'}
+                                                        </b>
+                                                        {it}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
                                     </div>
-                                </div>
-                            );
-                        })}
+                                );
+                            })}
                         {formulaireOuvert ? (
                             <NavBas
                                 retour={() => setFormulaireOuvert(null)}
-                                suivant={() => { setRapportHistorique(false); setVue('rapport'); }}
+                                suivant={() => {
+                                    setRapportHistorique(false);
+                                    setVue('rapport');
+                                }}
                                 libelleRetour={trText('← Tous les formulaires')}
                                 libelleSuivant={trText('Voir le rapport →')}
                             />
                         ) : (
                             <NavBas
                                 retour={() => setVue('accueil')}
-                                suivant={() => { setRapportHistorique(false); setVue('rapport'); }}
+                                suivant={() => {
+                                    setRapportHistorique(false);
+                                    setVue('rapport');
+                                }}
                                 libelleRetour={trText('← Accueil')}
                                 libelleSuivant={trText('Voir le rapport →')}
                             />
@@ -8463,7 +8624,8 @@ export default function App({
                                     color: C.ink,
                                 }}
                             >
-                                {bureau === 'AGRI' ? 'BT Agri' : 'BT Animal'} · {date}
+                                {bureau === 'AGRI' ? 'BT Agri' : 'BT Animal'} ·{' '}
+                                {date}
                             </div>
                             <div
                                 style={{
@@ -8475,13 +8637,33 @@ export default function App({
                                     color: '#555',
                                 }}
                             >
-                                <span>{travaux.length + cheptel.length} saisie(s)</span>
+                                <span>
+                                    {travaux.length + cheptel.length} saisie(s)
+                                </span>
                                 <span>· {problemes.length} problème(s)</span>
-                                <span>· {formFreq.reduce((n, f) => n + (f.faits || 0), 0)} contrôle(s) périodique(s)</span>
-                                {bureau === 'AGRI' && <span>· {totalRec} kg récoltés</span>}
+                                <span>
+                                    ·{' '}
+                                    {formFreq.reduce(
+                                        (n, f) => n + (f.faits || 0),
+                                        0,
+                                    )}{' '}
+                                    contrôle(s) périodique(s)
+                                </span>
+                                {bureau === 'AGRI' && (
+                                    <span>· {totalRec} kg récoltés</span>
+                                )}
                             </div>
-                            <div style={{ fontSize: 13, color: '#777', marginTop: 8, lineHeight: 1.45 }}>
-                                {trText('Vérifiez les alertes ci-dessous, puis copiez, téléchargez ou partagez le rapport.')}
+                            <div
+                                style={{
+                                    fontSize: 13,
+                                    color: '#777',
+                                    marginTop: 8,
+                                    lineHeight: 1.45,
+                                }}
+                            >
+                                {trText(
+                                    'Vérifiez les alertes ci-dessous, puis copiez, téléchargez ou partagez le rapport.',
+                                )}
                             </div>
                         </div>
                         {epis.filter((e) => !e.remplace && joursRestants(e) < 0)
@@ -8680,9 +8862,15 @@ export default function App({
                             {rapport()}
                         </pre>
                         <NavBas
-                            retour={() => setVue(rapportHistorique ? 'histo' : 'accueil')}
+                            retour={() =>
+                                setVue(rapportHistorique ? 'histo' : 'accueil')
+                            }
                             suivant={() => setVue('histo')}
-                            libelleRetour={rapportHistorique ? trText('← Rapports enregistrés') : trText('← Accueil')}
+                            libelleRetour={
+                                rapportHistorique
+                                    ? trText('← Rapports enregistrés')
+                                    : trText('← Accueil')
+                            }
                             libelleSuivant={trText('Rapports enregistrés →')}
                         />
                     </>
@@ -8742,7 +8930,9 @@ export default function App({
                                         </div>
                                     </div>
                                     <button
-                                        onClick={() => ouvrirRapportHistorique(h)}
+                                        onClick={() =>
+                                            ouvrirRapportHistorique(h)
+                                        }
                                         style={{
                                             padding: '12px 16px',
                                             background: C.laterite,
@@ -8902,12 +9092,19 @@ export default function App({
                                         display: 'flex',
                                         justifyContent: 'flex-end',
                                         gap: 10,
-                                        marginTop: dialog.type === 'prompt' ? 18 : 0,
+                                        marginTop:
+                                            dialog.type === 'prompt' ? 18 : 0,
                                     }}
                                 >
                                     <button
                                         type="button"
-                                        onClick={() => fermerDialog(dialog.type === 'prompt' ? '' : false)}
+                                        onClick={() =>
+                                            fermerDialog(
+                                                dialog.type === 'prompt'
+                                                    ? ''
+                                                    : false,
+                                            )
+                                        }
                                         style={{
                                             padding: '12px 16px',
                                             background: '#F3F1EB',
@@ -8923,7 +9120,13 @@ export default function App({
                                     </button>
                                     <button
                                         type="button"
-                                        onClick={() => fermerDialog(dialog.type === 'prompt' ? dialog.value : true)}
+                                        onClick={() =>
+                                            fermerDialog(
+                                                dialog.type === 'prompt'
+                                                    ? dialog.value
+                                                    : true,
+                                            )
+                                        }
                                         style={{
                                             padding: '12px 16px',
                                             background: C.laterite,

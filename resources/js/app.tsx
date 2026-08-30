@@ -10,6 +10,20 @@ import SettingsLayout from '@/layouts/settings/layout';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
+// Certains aperçus mobiles intégrés émettent exceptionnellement un événement
+// scroll sans cible. Inertia attend une cible DOM et s'arrête sinon.
+if (typeof document !== 'undefined') {
+    document.addEventListener(
+        'scroll',
+        (event) => {
+            if (event.target === null) {
+                event.stopImmediatePropagation();
+            }
+        },
+        true,
+    );
+}
+
 createInertiaApp({
     title: (title) => (title ? `${title} - ${appName}` : appName),
     layout: (name) => {
