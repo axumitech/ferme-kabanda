@@ -72,6 +72,12 @@ type Props = {
 
 const today = new Date().toISOString().slice(0, 10);
 
+const formatDateTime = (value: string): string =>
+    new Intl.DateTimeFormat('fr-FR', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+    }).format(new Date(value));
+
 const taskTone = (task: Task) => {
     if (task.statut === 'faite') return 'border-emerald-200 bg-emerald-50/60';
     if (task.statut === 'non_faite_non_justifiee')
@@ -668,9 +674,9 @@ export default function MyDay({
                                                                         }
                                                                     </span>
                                                                     <span>
-                                                                        {
-                                                                            event.created_at
-                                                                        }
+                                                                        {formatDateTime(
+                                                                            event.created_at,
+                                                                        )}
                                                                     </span>
                                                                 </div>
                                                             </div>

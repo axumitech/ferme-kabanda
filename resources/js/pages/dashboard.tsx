@@ -85,6 +85,13 @@ const statusClass = (task: Task) => {
     return 'bg-stone-100 text-stone-700 ring-stone-200';
 };
 
+const formatDate = (value: string): string =>
+    new Intl.DateTimeFormat('fr-FR', {
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric',
+    }).format(new Date(`${value}T12:00:00`));
+
 export default function Dashboard({
     stats,
     tasks,
@@ -342,7 +349,7 @@ export default function Dashboard({
                                                 )}
                                             </span>
                                             <span className="text-sm font-semibold text-[#637069]">
-                                                {task.date_due}
+                                                {formatDate(task.date_due)}
                                             </span>
                                         </div>
                                     </div>
@@ -444,7 +451,7 @@ export default function Dashboard({
                                             <div className="font-semibold">
                                                 {closure.site?.code} ·{' '}
                                                 {closure.departement?.code} ·{' '}
-                                                {closure.date}
+                                                {formatDate(closure.date)}
                                             </div>
                                             <div className="mt-1 text-sm text-[#637069]">
                                                 {closure.faites}/{closure.dues}{' '}

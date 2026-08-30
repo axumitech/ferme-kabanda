@@ -94,6 +94,12 @@ type Props = {
 
 const today = new Date().toISOString().slice(0, 10);
 
+const formatDateTime = (value: string): string =>
+    new Intl.DateTimeFormat('fr-FR', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+    }).format(new Date(value));
+
 const badgeClass = (task: Task) => {
     if (task.statut === 'faite') return 'admin-badge admin-badge--green';
     if (task.statut === 'non_faite_non_justifiee')
@@ -1074,9 +1080,9 @@ export default function OperationsAdmin({
                                                                         event.user_nom
                                                                     }{' '}
                                                                     ·{' '}
-                                                                    {
-                                                                        event.created_at
-                                                                    }
+                                                                    {formatDateTime(
+                                                                        event.created_at,
+                                                                    )}
                                                                 </div>
                                                             </div>
                                                         ),
@@ -1217,7 +1223,9 @@ export default function OperationsAdmin({
                                                 </div>
                                                 <div className="mt-1 text-[12px] text-[#7a857e]">
                                                     {entry.user_nom} ·{' '}
-                                                    {entry.created_at}
+                                                    {formatDateTime(
+                                                        entry.created_at,
+                                                    )}
                                                 </div>
                                             </div>
                                         ))}
