@@ -85,12 +85,21 @@ const statusClass = (task: Task) => {
     return 'bg-stone-100 text-stone-700 ring-stone-200';
 };
 
-const formatDate = (value: string): string =>
-    new Intl.DateTimeFormat('fr-FR', {
+const formatDate = (value: string): string => {
+    const date = new Date(
+        /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T12:00:00` : value,
+    );
+
+    if (Number.isNaN(date.getTime())) {
+        return value;
+    }
+
+    return new Intl.DateTimeFormat('fr-FR', {
         day: '2-digit',
         month: 'long',
         year: 'numeric',
-    }).format(new Date(`${value}T12:00:00`));
+    }).format(date);
+};
 
 export default function Dashboard({
     stats,
