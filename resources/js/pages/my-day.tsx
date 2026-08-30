@@ -40,7 +40,16 @@ type Task = {
     site?: { id: number; code: string; nom: string } | null;
     departement?: { id: number; code: string; nom: string } | null;
     motif?: Pick<Motif, 'id' | 'code' | 'libelle' | 'recevable'> | null;
-    evenements: Array<{ id: number; type: string; resume: string; user_nom: string; created_at: string }>;
+    evenements: Array<{
+        id: number;
+        type: string;
+        resume: string;
+        user_nom: string;
+        created_at: string;
+    }>;
+    can_act: boolean;
+    responsable_nom?: string | null;
+    mon_departement: boolean;
 };
 type Closure = {
     id: number;
@@ -58,20 +67,29 @@ type Props = {
         late: number;
         doneToday: number;
     };
+    vueParDefaut: string;
 };
 
 const today = new Date().toISOString().slice(0, 10);
 
 const taskTone = (task: Task) => {
     if (task.statut === 'faite') return 'border-emerald-200 bg-emerald-50/60';
-    if (task.statut === 'non_faite_non_justifiee') return 'border-red-200 bg-red-50/70';
-    if (task.statut === 'non_faite_justifiee') return 'border-amber-200 bg-amber-50/70';
+    if (task.statut === 'non_faite_non_justifiee')
+        return 'border-red-200 bg-red-50/70';
+    if (task.statut === 'non_faite_justifiee')
+        return 'border-amber-200 bg-amber-50/70';
     if (task.date_due < today) return 'border-red-200 bg-white';
 
     return 'border-[#ded8ca] bg-white';
 };
 
-export default function MyDay({ tasks, motifs, closures, stats }: Props) {
+export default function MyDay({
+    tasks,
+    motifs,
+    closures,
+    stats,
+    vueParDefaut,
+}: Props) {
     const { tr } = useI18n();
     const statusText: Record<string, string> = {
         a_faire: tr('À faire'),
@@ -81,9 +99,14 @@ export default function MyDay({ tasks, motifs, closures, stats }: Props) {
         reportee: tr('Reportée'),
         annulee: tr('Annulée'),
     };
-    const [selected, setSelected] = useState<Task | null>(tasks.find((task) => task.statut === 'a_faire') ?? tasks[0] ?? null);
+    const [selected, setSelected] = useState<Task | null>(
+        tasks.find((task) => task.statut === 'a_faire') ?? tasks[0] ?? null,
+    );
     const [query, setQuery] = useState('');
     const [mode, setMode] = useState<'open' | 'done' | 'all'>('open');
+    const [scope, setScope] = useState<'mine' | 'department' | 'team'>(
+        vueParDefaut === 'tout' ? 'team' : 'mine',
+    );
     const completeForm = useForm({ quantite: '', unite: '', commentaire: '' });
     const justifyForm = useForm({
         motif_id: motifs[0]?.id ? String(motifs[0].id) : '',
@@ -97,13 +120,19 @@ export default function MyDay({ tasks, motifs, closures, stats }: Props) {
                     mode === 'all' ||
                     (mode === 'open' && task.statut === 'a_faire') ||
                     (mode === 'done' && task.statut !== 'a_faire');
-                const matchesQuery = `${task.titre} ${task.reference} ${task.lieu ?? ''} ${task.site?.code ?? ''}`
-                    .toLowerCase()
-                    .includes(query.toLowerCase());
+                const matchesQuery =
+                    `${task.titre} ${task.reference} ${task.lieu ?? ''} ${task.site?.code ?? ''}`
+                        .toLowerCase()
+                        .includes(query.toLowerCase());
 
-                return matchesMode && matchesQuery;
+                const matchesScope =
+                    scope === 'team' ||
+                    (scope === 'department'
+                        ? task.mon_departement
+                        : task.can_act);
+                return matchesMode && matchesQuery && matchesScope;
             }),
-        [tasks, mode, query],
+        [tasks, mode, query, scope],
     );
 
     const complete = (event: React.FormEvent) => {
@@ -123,7 +152,8 @@ export default function MyDay({ tasks, motifs, closures, stats }: Props) {
 
         completeForm.post(`/journee/taches/${selected.id}/complete`, {
             preserveScroll: true,
-            onSuccess: () => completeForm.reset('quantite', 'unite', 'commentaire'),
+            onSuccess: () =>
+                completeForm.reset('quantite', 'unite', 'commentaire'),
         });
     };
 
@@ -153,18 +183,27 @@ export default function MyDay({ tasks, motifs, closures, stats }: Props) {
             <Head title={tr('Ma journée')} />
             <main className="min-h-screen bg-slate-50 px-4 py-5 text-slate-800 sm:px-6 lg:px-8">
                 <div className="mx-auto max-w-7xl space-y-6">
-                    <section className="bg-glass rounded-2xl border border-emerald-950/5 p-6 shadow-sm relative overflow-hidden">
-                        <div className="absolute top-0 right-0 p-12 bg-gradient-to-br from-emerald-400/20 to-transparent blur-3xl rounded-full w-96 h-96 -translate-y-1/2 translate-x-1/3 pointer-events-none"></div>
-                        <div className="relative flex flex-wrap items-start justify-between gap-4 z-10">
+                    <section className="bg-glass relative overflow-hidden rounded-2xl border border-emerald-950/5 p-6 shadow-sm">
+                        <div className="pointer-events-none absolute top-0 right-0 h-96 w-96 translate-x-1/3 -translate-y-1/2 rounded-full bg-gradient-to-br from-emerald-400/20 to-transparent p-12 blur-3xl"></div>
+                        <div className="relative z-10 flex flex-wrap items-start justify-between gap-4">
                             <div>
-                                <p className="text-xs font-bold uppercase tracking-widest text-emerald-600">{tr('Poste terrain')}</p>
-                                <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">{tr('Ma journée')}</h1>
-                                <p className="mt-2 text-sm text-slate-500 font-medium">{tr('Chaque tâche reçoit une réponse: faite ou justifiée.')}</p>
+                                <p className="text-xs font-bold tracking-widest text-emerald-600 uppercase">
+                                    {tr('Poste terrain')}
+                                </p>
+                                <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
+                                    {tr('Ma journée')}
+                                </h1>
+                                <p className="mt-2 text-sm font-medium text-slate-500">
+                                    {tr(
+                                        'Chaque tâche reçoit une réponse: faite ou justifiée.',
+                                    )}
+                                </p>
                             </div>
                             {closures.length > 0 && (
-                                <div className="rounded-xl border border-emerald-200/50 bg-emerald-50/50 backdrop-blur-md px-4 py-3 text-sm font-semibold text-emerald-800 shadow-sm flex items-center">
+                                <div className="flex items-center rounded-xl border border-emerald-200/50 bg-emerald-50/50 px-4 py-3 text-sm font-semibold text-emerald-800 shadow-sm backdrop-blur-md">
                                     <Lock className="mr-2.5" size={16} />
-                                    {closures.length} {tr("clôture(s) aujourd'hui")}
+                                    {closures.length}{' '}
+                                    {tr("clôture(s) aujourd'hui")}
                                 </div>
                             )}
                         </div>
@@ -172,19 +211,47 @@ export default function MyDay({ tasks, motifs, closures, stats }: Props) {
 
                     <section className="grid gap-4 md:grid-cols-4">
                         {[
-                            { label: tr('Assignées'), value: stats.assigned, icon: ClipboardCheck },
-                            { label: tr('Ouvertes'), value: stats.open, icon: CalendarDays },
-                            { label: tr('En retard'), value: stats.late, icon: AlertTriangle, danger: stats.late > 0 },
-                            { label: tr('Faites'), value: stats.doneToday, icon: Check },
+                            {
+                                label: tr('Assignées'),
+                                value: stats.assigned,
+                                icon: ClipboardCheck,
+                            },
+                            {
+                                label: tr('Ouvertes'),
+                                value: stats.open,
+                                icon: CalendarDays,
+                            },
+                            {
+                                label: tr('En retard'),
+                                value: stats.late,
+                                icon: AlertTriangle,
+                                danger: stats.late > 0,
+                            },
+                            {
+                                label: tr('Faites'),
+                                value: stats.doneToday,
+                                icon: Check,
+                            },
                         ].map(({ label, value, icon: Icon, danger }) => (
-                            <div key={label} className={`bg-glass hover-lift rounded-2xl border p-5 shadow-sm transition-all duration-300 ${danger ? 'border-red-200 shadow-red-100' : 'border-emerald-950/5'}`}>
+                            <div
+                                key={label}
+                                className={`bg-glass hover-lift rounded-2xl border p-5 shadow-sm transition-all duration-300 ${danger ? 'border-red-200 shadow-red-100' : 'border-emerald-950/5'}`}
+                            >
                                 <div className="flex items-start justify-between">
-                                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500">{label}</span>
-                                    <span className={`grid size-10 place-items-center rounded-xl shadow-sm ${danger ? 'bg-gradient-to-br from-red-50 to-red-100 text-red-600' : 'bg-gradient-to-br from-emerald-50 to-emerald-100 text-emerald-600'}`}>
+                                    <span className="text-xs font-bold tracking-wider text-slate-500 uppercase">
+                                        {label}
+                                    </span>
+                                    <span
+                                        className={`grid size-10 place-items-center rounded-xl shadow-sm ${danger ? 'bg-gradient-to-br from-red-50 to-red-100 text-red-600' : 'bg-gradient-to-br from-emerald-50 to-emerald-100 text-emerald-600'}`}
+                                    >
                                         <Icon size={18} strokeWidth={2.5} />
                                     </span>
                                 </div>
-                                <div className={`mt-5 text-4xl font-extrabold ${danger ? 'text-red-600' : 'text-slate-800'}`}>{value}</div>
+                                <div
+                                    className={`mt-5 text-4xl font-extrabold ${danger ? 'text-red-600' : 'text-slate-800'}`}
+                                >
+                                    {value}
+                                </div>
                             </div>
                         ))}
                     </section>
@@ -192,7 +259,43 @@ export default function MyDay({ tasks, motifs, closures, stats }: Props) {
                     <section className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,.95fr)_minmax(320px,1.05fr)]">
                         <div className="space-y-4">
                             <div className="bg-glass rounded-2xl border border-emerald-950/5 p-4 shadow-sm">
-                                <div className="flex flex-wrap gap-2 mb-4">
+                                <div className="mb-4 flex flex-wrap gap-2">
+                                    {[
+                                        ['mine', tr('Mes tâches')],
+                                        ['department', tr('Mon département')],
+                                        ['team', tr('Toute la ferme')],
+                                    ].map(([value, label]) => (
+                                        <button
+                                            key={value}
+                                            type="button"
+                                            onClick={() =>
+                                                setScope(
+                                                    value as
+                                                        | 'mine'
+                                                        | 'department'
+                                                        | 'team',
+                                                )
+                                            }
+                                            className={`rounded-xl px-4 py-2.5 text-sm font-semibold shadow-sm transition-all duration-200 ${scope === value ? 'bg-slate-800 text-white' : 'border border-slate-200 bg-white text-slate-600'}`}
+                                        >
+                                            {label}
+                                        </button>
+                                    ))}
+                                </div>
+                                <p className="mb-4 text-xs font-medium text-slate-500">
+                                    {scope === 'team'
+                                        ? tr(
+                                              'Registre de toute la ferme : vous voyez les tâches sans pouvoir agir à la place d’un collègue.',
+                                          )
+                                        : scope === 'department'
+                                          ? tr(
+                                                'Les tâches de votre département, y compris celles de vos collègues.',
+                                            )
+                                          : tr(
+                                                'Vos tâches et celles auxquelles vous participez.',
+                                            )}
+                                </p>
+                                <div className="mb-4 flex flex-wrap gap-2">
                                     {[
                                         ['open', tr('À faire')],
                                         ['done', tr('Traitées')],
@@ -201,20 +304,32 @@ export default function MyDay({ tasks, motifs, closures, stats }: Props) {
                                         <button
                                             key={value}
                                             type="button"
-                                            onClick={() => setMode(value as 'open' | 'done' | 'all')}
-                                            className={`rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-200 shadow-sm ${mode === value ? 'bg-gradient-to-r from-emerald-600 to-emerald-700 text-white shadow-emerald-200' : 'bg-white hover:bg-slate-50 text-slate-600 border border-slate-200'}`}
+                                            onClick={() =>
+                                                setMode(
+                                                    value as
+                                                        'open' | 'done' | 'all',
+                                                )
+                                            }
+                                            className={`rounded-xl px-4 py-2.5 text-sm font-semibold shadow-sm transition-all duration-200 ${mode === value ? 'bg-gradient-to-r from-emerald-600 to-emerald-700 text-white shadow-emerald-200' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
                                         >
                                             {label}
                                         </button>
                                     ))}
                                 </div>
-                                <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 shadow-sm focus-within:ring-2 focus-within:ring-emerald-500 focus-within:border-emerald-500 transition-all">
-                                    <Search size={18} className="text-slate-400" />
+                                <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 shadow-sm transition-all focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500">
+                                    <Search
+                                        size={18}
+                                        className="text-slate-400"
+                                    />
                                     <input
                                         value={query}
-                                        onChange={(event) => setQuery(event.target.value)}
-                                        className="h-12 w-full bg-transparent text-sm font-medium outline-none placeholder:text-slate-400 text-slate-800"
-                                        placeholder={tr('Chercher une tâche...')}
+                                        onChange={(event) =>
+                                            setQuery(event.target.value)
+                                        }
+                                        className="h-12 w-full bg-transparent text-sm font-medium text-slate-800 outline-none placeholder:text-slate-400"
+                                        placeholder={tr(
+                                            'Chercher une tâche...',
+                                        )}
                                     />
                                 </div>
                             </div>
@@ -225,133 +340,343 @@ export default function MyDay({ tasks, motifs, closures, stats }: Props) {
                                         key={task.id}
                                         type="button"
                                         onClick={() => setSelected(task)}
-                                        className={`rounded-2xl border p-5 text-left shadow-sm hover-lift transition-all duration-200 relative overflow-hidden ${taskTone(task)} ${selected?.id === task.id ? 'ring-2 ring-emerald-500 border-emerald-500 scale-[1.02]' : 'hover:border-emerald-200'}`}
+                                        className={`hover-lift relative overflow-hidden rounded-2xl border p-5 text-left shadow-sm transition-all duration-200 ${taskTone(task)} ${selected?.id === task.id ? 'scale-[1.02] border-emerald-500 ring-2 ring-emerald-500' : 'hover:border-emerald-200'}`}
                                     >
-                                        {selected?.id === task.id && <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-emerald-500 rounded-l-2xl"></div>}
+                                        {selected?.id === task.id && (
+                                            <div className="absolute top-0 bottom-0 left-0 w-1.5 rounded-l-2xl bg-emerald-500"></div>
+                                        )}
                                         <div className="flex items-start justify-between gap-4">
                                             <div>
-                                                <div className="font-bold text-base text-slate-800 line-clamp-2">{task.titre}</div>
-                                                <div className="mt-2 text-xs font-medium text-slate-500 tracking-wide">{task.reference} &bull; {task.date_due}{task.heure_due ? ` &bull; ${task.heure_due}` : ''}</div>
+                                                <div className="line-clamp-2 text-base font-bold text-slate-800">
+                                                    {task.titre}
+                                                </div>
+                                                <div className="mt-2 text-xs font-medium tracking-wide text-slate-500">
+                                                    {task.reference} &bull;{' '}
+                                                    {task.date_due}
+                                                    {task.heure_due
+                                                        ? ` &bull; ${task.heure_due}`
+                                                        : ''}
+                                                </div>
                                             </div>
-                                            <span className={`rounded-lg px-2.5 py-1 text-xs font-bold uppercase tracking-wider shrink-0 ${task.statut === 'a_faire' ? 'bg-amber-100 text-amber-700' : task.statut === 'faite' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
-                                                {statusText[task.statut] ?? task.statut}
+                                            <span
+                                                className={`shrink-0 rounded-lg px-2.5 py-1 text-xs font-bold tracking-wider uppercase ${task.statut === 'a_faire' ? 'bg-amber-100 text-amber-700' : task.statut === 'faite' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}
+                                            >
+                                                {statusText[task.statut] ??
+                                                    task.statut}
                                             </span>
                                         </div>
                                         <div className="mt-4 flex items-center gap-2 text-sm font-medium text-slate-500">
-                                            <MapPin size={16} className="text-slate-400" /> {task.lieu || task.site?.nom || tr('Lieu libre')}
+                                            <MapPin
+                                                size={16}
+                                                className="text-slate-400"
+                                            />{' '}
+                                            {task.lieu ||
+                                                task.site?.nom ||
+                                                tr('Lieu libre')}
+                                            {!task.can_act && (
+                                                <span className="ml-auto rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
+                                                    Responsable :{' '}
+                                                    {task.responsable_nom ??
+                                                        tr('Non assignée')}
+                                                </span>
+                                            )}
                                         </div>
                                     </button>
                                 ))}
                                 {filtered.length === 0 && (
                                     <div className="rounded-2xl border border-dashed border-slate-300 bg-white/50 px-5 py-12 text-center text-sm font-medium text-slate-500 shadow-sm backdrop-blur-sm">
-                                        {tr('Aucune tâche ne correspond à vos critères.')}
+                                        {tr(
+                                            'Aucune tâche ne correspond à vos critères.',
+                                        )}
                                     </div>
                                 )}
                             </div>
                         </div>
 
-                        <aside className="bg-glass rounded-2xl border border-emerald-950/5 shadow-sm self-start sticky top-6 overflow-hidden">
+                        <aside className="bg-glass sticky top-6 self-start overflow-hidden rounded-2xl border border-emerald-950/5 shadow-sm">
                             <div className="border-b border-emerald-950/5 bg-white/50 p-6">
                                 {selected ? (
                                     <>
-                                        <p className="text-xs font-bold uppercase tracking-widest text-emerald-600">{selected.reference}</p>
-                                        <h2 className="mt-3 text-2xl font-extrabold text-slate-800 leading-tight">{selected.titre}</h2>
-                                        <p className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-slate-500 bg-slate-100 rounded-lg px-3 py-1.5">
-                                            <MapPin size={14}/> {selected.site?.code ?? tr('Site libre')} &bull; {selected.departement?.code ?? tr('Dépt libre')} &bull; {selected.lieu ?? tr('Lieu libre')}
+                                        <p className="text-xs font-bold tracking-widest text-emerald-600 uppercase">
+                                            {selected.reference}
+                                        </p>
+                                        <h2 className="mt-3 text-2xl leading-tight font-extrabold text-slate-800">
+                                            {selected.titre}
+                                        </h2>
+                                        <p className="mt-3 inline-flex items-center gap-2 rounded-lg bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-500">
+                                            <MapPin size={14} />{' '}
+                                            {selected.site?.code ??
+                                                tr('Site libre')}{' '}
+                                            &bull;{' '}
+                                            {selected.departement?.code ??
+                                                tr('Dépt libre')}{' '}
+                                            &bull;{' '}
+                                            {selected.lieu ?? tr('Lieu libre')}
                                         </p>
                                     </>
                                 ) : (
-                                    <h2 className="text-xl font-bold text-slate-400 py-4 text-center">{tr('Aucune tâche sélectionnée')}</h2>
+                                    <h2 className="py-4 text-center text-xl font-bold text-slate-400">
+                                        {tr('Aucune tâche sélectionnée')}
+                                    </h2>
                                 )}
                             </div>
 
                             {selected && (
-                                <div className="space-y-6 p-6 bg-slate-50/30">
+                                <div className="space-y-6 bg-slate-50/30 p-6">
                                     {selected.instruction && (
-                                        <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-5 text-sm leading-relaxed text-emerald-900 shadow-inner font-medium">
-                                            <div className="text-xs font-bold uppercase text-emerald-600 mb-2 tracking-wider">{tr('Instructions')}</div>
+                                        <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-5 text-sm leading-relaxed font-medium text-emerald-900 shadow-inner">
+                                            <div className="mb-2 text-xs font-bold tracking-wider text-emerald-600 uppercase">
+                                                {tr('Instructions')}
+                                            </div>
                                             {selected.instruction}
                                         </div>
                                     )}
 
-                                    {selected.statut === 'a_faire' ? (
+                                    {selected.statut === 'a_faire' &&
+                                    selected.can_act ? (
                                         <div className="grid gap-5 xl:grid-cols-2">
-                                            <form onSubmit={complete} className="rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm hover:shadow-md transition-shadow">
-                                                <div className="mb-4 flex items-center gap-2.5 font-bold text-emerald-700 text-lg">
-                                                    <div className="p-1.5 bg-emerald-100 rounded-lg"><Check size={18} strokeWidth={3} /></div> {tr('Faite')}
+                                            <form
+                                                onSubmit={complete}
+                                                className="rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
+                                            >
+                                                <div className="mb-4 flex items-center gap-2.5 text-lg font-bold text-emerald-700">
+                                                    <div className="rounded-lg bg-emerald-100 p-1.5">
+                                                        <Check
+                                                            size={18}
+                                                            strokeWidth={3}
+                                                        />
+                                                    </div>{' '}
+                                                    {tr('Faite')}
                                                 </div>
                                                 <div className="grid gap-4 sm:grid-cols-2">
-                                                    <label className="grid gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-500">
+                                                    <label className="grid gap-1.5 text-xs font-bold tracking-wider text-slate-500 uppercase">
                                                         {tr('Quantité')}
-                                                        <input type="number" min="0" step="0.0001" value={completeForm.data.quantite} onChange={(event) => completeForm.setData('quantite', event.target.value)} className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-medium text-slate-800 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all" />
-                                                        <span className="text-[11px] font-medium normal-case tracking-normal text-slate-400">{tr('Facultatif : volume réellement exécuté.')}</span>
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            step="0.0001"
+                                                            value={
+                                                                completeForm
+                                                                    .data
+                                                                    .quantite
+                                                            }
+                                                            onChange={(event) =>
+                                                                completeForm.setData(
+                                                                    'quantite',
+                                                                    event.target
+                                                                        .value,
+                                                                )
+                                                            }
+                                                            className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-medium text-slate-800 transition-all outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                                                        />
+                                                        <span className="text-[11px] font-medium tracking-normal text-slate-400 normal-case">
+                                                            {tr(
+                                                                'Facultatif : volume réellement exécuté.',
+                                                            )}
+                                                        </span>
                                                     </label>
-                                                    <label className="grid gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-500">
+                                                    <label className="grid gap-1.5 text-xs font-bold tracking-wider text-slate-500 uppercase">
                                                         {tr('Unité')}
-                                                        <input value={completeForm.data.unite} onChange={(event) => completeForm.setData('unite', event.target.value)} className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-medium text-slate-800 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all" />
-                                                        <span className="text-[11px] font-medium normal-case tracking-normal text-slate-400">{tr('Ex : planches, kg, litres, passage.')}</span>
+                                                        <input
+                                                            value={
+                                                                completeForm
+                                                                    .data.unite
+                                                            }
+                                                            onChange={(event) =>
+                                                                completeForm.setData(
+                                                                    'unite',
+                                                                    event.target
+                                                                        .value,
+                                                                )
+                                                            }
+                                                            className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-medium text-slate-800 transition-all outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                                                        />
+                                                        <span className="text-[11px] font-medium tracking-normal text-slate-400 normal-case">
+                                                            {tr(
+                                                                'Ex : planches, kg, litres, passage.',
+                                                            )}
+                                                        </span>
                                                     </label>
                                                 </div>
-                                                <label className="mt-4 grid gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-500">
+                                                <label className="mt-4 grid gap-1.5 text-xs font-bold tracking-wider text-slate-500 uppercase">
                                                     {tr('Commentaire')}
-                                                    <textarea rows={3} value={completeForm.data.commentaire} onChange={(event) => completeForm.setData('commentaire', event.target.value)} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-800 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all resize-none" />
-                                                    <span className="text-[11px] font-medium normal-case tracking-normal text-slate-400">{tr('Ajoutez ce qui aide l’admin à comprendre le résultat.')}</span>
+                                                    <textarea
+                                                        rows={3}
+                                                        value={
+                                                            completeForm.data
+                                                                .commentaire
+                                                        }
+                                                        onChange={(event) =>
+                                                            completeForm.setData(
+                                                                'commentaire',
+                                                                event.target
+                                                                    .value,
+                                                            )
+                                                        }
+                                                        className="resize-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-800 transition-all outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                                                    />
+                                                    <span className="text-[11px] font-medium tracking-normal text-slate-400 normal-case">
+                                                        {tr(
+                                                            'Ajoutez ce qui aide l’admin à comprendre le résultat.',
+                                                        )}
+                                                    </span>
                                                 </label>
-                                                <button type="submit" disabled={completeForm.processing} className="mt-5 inline-flex h-11 w-full items-center justify-center rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 text-sm font-bold text-white shadow-sm hover:from-emerald-700 hover:to-emerald-800 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 transition-all disabled:opacity-70">
+                                                <button
+                                                    type="submit"
+                                                    disabled={
+                                                        completeForm.processing
+                                                    }
+                                                    className="mt-5 inline-flex h-11 w-full items-center justify-center rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 text-sm font-bold text-white shadow-sm transition-all hover:from-emerald-700 hover:to-emerald-800 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:opacity-70"
+                                                >
                                                     {tr('Enregistrer')}
                                                 </button>
                                             </form>
 
-                                            <form onSubmit={justify} className="rounded-2xl border border-amber-200 bg-white p-5 shadow-sm hover:shadow-md transition-shadow">
-                                                <div className="mb-4 flex items-center gap-2.5 font-bold text-amber-700 text-lg">
-                                                    <div className="p-1.5 bg-amber-100 rounded-lg"><FileClock size={18} strokeWidth={2.5} /></div> {tr('Justifiée')}
+                                            <form
+                                                onSubmit={justify}
+                                                className="rounded-2xl border border-amber-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
+                                            >
+                                                <div className="mb-4 flex items-center gap-2.5 text-lg font-bold text-amber-700">
+                                                    <div className="rounded-lg bg-amber-100 p-1.5">
+                                                        <FileClock
+                                                            size={18}
+                                                            strokeWidth={2.5}
+                                                        />
+                                                    </div>{' '}
+                                                    {tr('Justifiée')}
                                                 </div>
-                                                <label className="grid gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-500">
+                                                <label className="grid gap-1.5 text-xs font-bold tracking-wider text-slate-500 uppercase">
                                                     {tr('Motif')}
-                                                    <select value={justifyForm.data.motif_id} onChange={(event) => justifyForm.setData('motif_id', event.target.value)} className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-medium text-slate-800 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 transition-all">
+                                                    <select
+                                                        value={
+                                                            justifyForm.data
+                                                                .motif_id
+                                                        }
+                                                        onChange={(event) =>
+                                                            justifyForm.setData(
+                                                                'motif_id',
+                                                                event.target
+                                                                    .value,
+                                                            )
+                                                        }
+                                                        className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-medium text-slate-800 transition-all outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20"
+                                                    >
                                                         {motifs.map((motif) => (
-                                                            <option key={motif.id} value={motif.id}>
-                                                                {motif.libelle}{motif.recevable ? '' : ' (RH)'}
+                                                            <option
+                                                                key={motif.id}
+                                                                value={motif.id}
+                                                            >
+                                                                {motif.libelle}
+                                                                {motif.recevable
+                                                                    ? ''
+                                                                    : ' (RH)'}
                                                             </option>
                                                         ))}
                                                     </select>
-                                                    <span className="text-[11px] font-medium normal-case tracking-normal text-slate-400">{tr('Choisissez la raison réelle de non-exécution.')}</span>
+                                                    <span className="text-[11px] font-medium tracking-normal text-slate-400 normal-case">
+                                                        {tr(
+                                                            'Choisissez la raison réelle de non-exécution.',
+                                                        )}
+                                                    </span>
                                                 </label>
-                                                <label className="mt-4 grid gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-500">
+                                                <label className="mt-4 grid gap-1.5 text-xs font-bold tracking-wider text-slate-500 uppercase">
                                                     {tr('Preuve / Détails')}
-                                                    <input value={justifyForm.data.motif_precision} onChange={(event) => justifyForm.setData('motif_precision', event.target.value)} className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-medium text-slate-800 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 transition-all" />
-                                                    <span className="text-[11px] font-medium normal-case tracking-normal text-slate-400">{tr('Ex : bon de travail, responsable consulté, incident, article manquant.')}</span>
+                                                    <input
+                                                        value={
+                                                            justifyForm.data
+                                                                .motif_precision
+                                                        }
+                                                        onChange={(event) =>
+                                                            justifyForm.setData(
+                                                                'motif_precision',
+                                                                event.target
+                                                                    .value,
+                                                            )
+                                                        }
+                                                        className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-medium text-slate-800 transition-all outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20"
+                                                    />
+                                                    <span className="text-[11px] font-medium tracking-normal text-slate-400 normal-case">
+                                                        {tr(
+                                                            'Ex : bon de travail, responsable consulté, incident, article manquant.',
+                                                        )}
+                                                    </span>
                                                 </label>
-                                                <button type="submit" disabled={justifyForm.processing} className="mt-5 inline-flex h-11 w-full items-center justify-center rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-sm font-bold text-white shadow-sm hover:from-amber-600 hover:to-amber-700 focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 transition-all disabled:opacity-70">
+                                                <button
+                                                    type="submit"
+                                                    disabled={
+                                                        justifyForm.processing
+                                                    }
+                                                    className="mt-5 inline-flex h-11 w-full items-center justify-center rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-sm font-bold text-white shadow-sm transition-all hover:from-amber-600 hover:to-amber-700 focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 disabled:opacity-70"
+                                                >
                                                     {tr('Justifier')}
                                                 </button>
                                             </form>
                                         </div>
                                     ) : (
-                                        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm text-center">
-                                            <div className="inline-block p-3 rounded-full bg-slate-100 mb-3"><Check size={24} className="text-emerald-500" strokeWidth={3}/></div>
-                                            <div className="font-bold text-lg text-slate-800">{statusText[selected.statut] ?? selected.statut}</div>
-                                            <div className="mt-2 text-sm font-medium text-slate-500 bg-slate-50 rounded-lg p-3 border border-slate-100">
-                                                {selected.commentaire || selected.motif?.libelle || selected.motif_precision || tr('Traitement enregistré avec succès.')}
+                                        <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm">
+                                            <div className="mb-3 inline-block rounded-full bg-slate-100 p-3">
+                                                <Check
+                                                    size={24}
+                                                    className="text-emerald-500"
+                                                    strokeWidth={3}
+                                                />
+                                            </div>
+                                            <div className="text-lg font-bold text-slate-800">
+                                                {selected.statut === 'a_faire'
+                                                    ? tr('Tâche d’un collègue')
+                                                    : (statusText[
+                                                          selected.statut
+                                                      ] ?? selected.statut)}
+                                            </div>
+                                            <div className="mt-2 rounded-lg border border-slate-100 bg-slate-50 p-3 text-sm font-medium text-slate-500">
+                                                {selected.statut ===
+                                                    'a_faire' &&
+                                                !selected.can_act
+                                                    ? `${tr('Visible pour coordination. Responsable :')} ${selected.responsable_nom ?? tr('Non assignée')}.`
+                                                    : selected.commentaire ||
+                                                      selected.motif?.libelle ||
+                                                      selected.motif_precision ||
+                                                      tr(
+                                                          'Traitement enregistré avec succès.',
+                                                      )}
                                             </div>
                                         </div>
                                     )}
 
                                     {selected.evenements.length > 0 && (
-                                        <div className="pt-4 border-t border-emerald-950/5">
-                                            <div className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-400">{tr('Historique des actions')}</div>
-                                            <div className="space-y-3 relative before:absolute before:inset-0 before:ml-2 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-200 before:to-transparent">
-                                                {selected.evenements.map((event) => (
-                                                    <div key={event.id} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
-                                                        <div className="rounded-xl border border-slate-200 bg-white p-3.5 text-sm shadow-sm w-[calc(100%-2rem)] md:w-[calc(50%-1.5rem)] hover:shadow-md transition-shadow">
-                                                            <div className="font-bold text-slate-800">{event.resume}</div>
-                                                            <div className="mt-1.5 flex items-center justify-between text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                                                                <span>{event.user_nom}</span>
-                                                                <span>{event.created_at}</span>
+                                        <div className="border-t border-emerald-950/5 pt-4">
+                                            <div className="mb-3 text-xs font-bold tracking-widest text-slate-400 uppercase">
+                                                {tr('Historique des actions')}
+                                            </div>
+                                            <div className="relative space-y-3 before:absolute before:inset-0 before:ml-2 before:h-full before:w-0.5 before:-translate-x-px before:bg-gradient-to-b before:from-transparent before:via-slate-200 before:to-transparent md:before:mx-auto md:before:translate-x-0">
+                                                {selected.evenements.map(
+                                                    (event) => (
+                                                        <div
+                                                            key={event.id}
+                                                            className="group is-active relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse"
+                                                        >
+                                                            <div className="w-[calc(100%-2rem)] rounded-xl border border-slate-200 bg-white p-3.5 text-sm shadow-sm transition-shadow hover:shadow-md md:w-[calc(50%-1.5rem)]">
+                                                                <div className="font-bold text-slate-800">
+                                                                    {
+                                                                        event.resume
+                                                                    }
+                                                                </div>
+                                                                <div className="mt-1.5 flex items-center justify-between text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
+                                                                    <span>
+                                                                        {
+                                                                            event.user_nom
+                                                                        }
+                                                                    </span>
+                                                                    <span>
+                                                                        {
+                                                                            event.created_at
+                                                                        }
+                                                                    </span>
+                                                                </div>
                                                             </div>
                                                         </div>
-                                                    </div>
-                                                ))}
+                                                    ),
+                                                )}
                                             </div>
                                         </div>
                                     )}

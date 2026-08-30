@@ -1,4 +1,4 @@
-import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
+import { Head, router, useForm, usePage } from '@inertiajs/react';
 import {
     Mail,
     Pencil,
@@ -20,10 +20,17 @@ type Member = {
     email: string | null;
     phone: string | null;
     reference_item_id: number | null;
+    site_id: number | null;
+    departement_id: number | null;
     team_member: TeamMember | null;
+    site: Reference | null;
+    departement: Reference | null;
     is_admin: boolean;
+    niveau_hierarchie: number;
     created_at: string;
 };
+
+type Reference = { id: number; code: string; nom: string };
 
 type TeamMember = {
     id: number;
@@ -36,6 +43,8 @@ type TeamMember = {
 type Props = {
     members: Member[];
     teamMembers: TeamMember[];
+    sites: Reference[];
+    departements: Reference[];
     initialReferenceItemId: number | null;
 };
 
@@ -46,12 +55,17 @@ const emptyMember = {
     password: '',
     password_confirmation: '',
     reference_item_id: '',
+    site_id: '',
+    departement_id: '',
     is_admin: false,
+    niveau_hierarchie: 4,
 };
 
 export default function MembersAdmin({
     members,
     teamMembers,
+    sites,
+    departements,
     initialReferenceItemId,
 }: Props) {
     const { confirm, ConfirmDialog } = useConfirmDialog();
@@ -77,8 +91,6 @@ export default function MembersAdmin({
         );
     }, [members, query]);
 
-    // ADD TEST TO SEA IF IT'S WORK
-
     const reset = () => {
         setEditing(null);
         form.setData({ ...emptyMember, reference_item_id: '' });
@@ -94,7 +106,10 @@ export default function MembersAdmin({
             password: '',
             password_confirmation: '',
             reference_item_id: member.reference_item_id?.toString() ?? '',
+            site_id: member.site_id?.toString() ?? '',
+            departement_id: member.departement_id?.toString() ?? '',
             is_admin: member.is_admin,
+            niveau_hierarchie: member.niveau_hierarchie,
         });
         form.clearErrors();
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -117,8 +132,10 @@ export default function MembersAdmin({
     };
 
     const remove = async (member: Member) => {
-        if (member.id === currentUser.id) return;
-        
+        if (member.id === currentUser.id) {
+            return;
+        }
+
         if (
             await confirm({
                 title: 'Confirmation de suppression',
@@ -141,14 +158,14 @@ export default function MembersAdmin({
             <ConfirmDialog />
             <Head title="Gestion des membres" />
 
-            <div className="admin-animate-in mx-auto grid min-w-0 max-w-7xl gap-6 lg:grid-cols-[380px_minmax(0,1fr)]">
-                <section className="h-fit admin-form-panel lg:sticky lg:top-5">
+            <div className="admin-animate-in mx-auto grid max-w-7xl min-w-0 gap-6 lg:grid-cols-[380px_minmax(0,1fr)]">
+                <section className="admin-form-panel h-fit lg:sticky lg:top-5">
                     <div className="mb-5 flex items-center gap-3">
                         <div className="rounded-xl bg-[#e7f1e9] p-2.5 text-[#276644]">
                             <UserPlus className="size-5" />
                         </div>
                         <div>
-                            <h2 className="font-semibold text-[15px] text-[#17352a]">
+                            <h2 className="text-[15px] font-semibold text-[#17352a]">
                                 {editing
                                     ? 'Modifier le membre'
                                     : 'Nouveau membre'}
@@ -203,7 +220,8 @@ export default function MembersAdmin({
                             />
                         </Field>
                         <p className="admin-form-hint -mt-2">
-                            Utilisez le nom que l’équipe reconnaît sur les feuilles terrain.
+                            Utilisez le nom que l’équipe reconnaît sur les
+                            feuilles terrain.
                         </p>
                         <Field
                             label="Numéro de téléphone"
@@ -221,7 +239,8 @@ export default function MembersAdmin({
                             />
                         </Field>
                         <p className="admin-form-hint -mt-2">
-                            Le téléphone devient l’identifiant simple pour les agents sans e-mail.
+                            Le téléphone devient l’identifiant simple pour les
+                            agents sans e-mail.
                         </p>
                         <Field
                             label="Adresse e-mail (facultative)"
@@ -263,7 +282,9 @@ export default function MembersAdmin({
                                     required={!editing}
                                 />
                                 {!editing && (
-                                    <span className="admin-form-hint">Minimum 8 caractères.</span>
+                                    <span className="admin-form-hint">
+                                        Minimum 8 caractères.
+                                    </span>
                                 )}
                             </Field>
                             <Field
@@ -297,13 +318,13 @@ export default function MembersAdmin({
                                         event.target.checked,
                                     )
                                 }
-                                className="mt-0.5 size-4 rounded text-[#174a31] focus:ring-[#174a31]/20 cursor-pointer"
+                                className="mt-0.5 size-4 cursor-pointer rounded text-[#174a31] focus:ring-[#174a31]/20"
                             />
                             <span>
                                 <span className="block text-[13.5px] font-semibold text-[#17352a]">
                                     Accès administrateur
                                 </span>
-                                <span className="block text-[12px] text-[#637069] mt-0.5">
+                                <span className="mt-0.5 block text-[12px] text-[#637069]">
                                     Autorise la gestion des membres et des
                                     données.
                                 </span>
@@ -314,6 +335,80 @@ export default function MembersAdmin({
                                 {form.errors.is_admin}
                             </p>
                         )}
+
+                        <Field
+                            label="Niveau hiérarchique"
+                            error={form.errors.niveau_hierarchie}
+                        >
+                            <select
+                                value={form.data.niveau_hierarchie}
+                                onChange={(event) =>
+                                    form.setData(
+                                        'niveau_hierarchie',
+                                        Number(event.target.value),
+                                    )
+                                }
+                            >
+                                <option value={1}>1 — Direction</option>
+                                <option value={2}>2 — Management</option>
+                                <option value={3}>3 — Encadrement</option>
+                                <option value={4}>4 — Exécution</option>
+                            </select>
+                            <span className="text-[11px] font-normal text-[#637069]">
+                                Détermine la visibilité des données restreintes
+                                et confidentielles, indépendamment de l’accès
+                                technique à l’administration.
+                            </span>
+                        </Field>
+
+                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                            <Field
+                                label="Site principal"
+                                error={form.errors.site_id}
+                            >
+                                <select
+                                    value={form.data.site_id}
+                                    onChange={(event) =>
+                                        form.setData(
+                                            'site_id',
+                                            event.target.value,
+                                        )
+                                    }
+                                >
+                                    <option value="">Non précisé</option>
+                                    {sites.map((site) => (
+                                        <option key={site.id} value={site.id}>
+                                            {site.code} — {site.nom}
+                                        </option>
+                                    ))}
+                                </select>
+                            </Field>
+                            <Field
+                                label="Département"
+                                error={form.errors.departement_id}
+                            >
+                                <select
+                                    value={form.data.departement_id}
+                                    onChange={(event) =>
+                                        form.setData(
+                                            'departement_id',
+                                            event.target.value,
+                                        )
+                                    }
+                                >
+                                    <option value="">Non précisé</option>
+                                    {departements.map((departement) => (
+                                        <option
+                                            key={departement.id}
+                                            value={departement.id}
+                                        >
+                                            {departement.code} —{' '}
+                                            {departement.nom}
+                                        </option>
+                                    ))}
+                                </select>
+                            </Field>
+                        </div>
 
                         <div className="flex flex-col gap-2 pt-2 sm:flex-row">
                             {editing && (
@@ -347,7 +442,8 @@ export default function MembersAdmin({
                                 ÉQUIPE
                             </p>
                             <h2 className="text-2xl font-semibold text-[#17352a]">
-                                {members.length} membre{members.length > 1 ? 's' : ''}
+                                {members.length} membre
+                                {members.length > 1 ? 's' : ''}
                             </h2>
                             <p className="mt-1 text-[13px] text-[#637069]">
                                 {
@@ -358,11 +454,13 @@ export default function MembersAdmin({
                                 rattaché(s) à une équipe
                             </p>
                         </div>
-                        <div className="admin-search mb-0 sm:max-w-xs w-full">
+                        <div className="admin-search mb-0 w-full sm:max-w-xs">
                             <Search size={16} />
                             <input
                                 value={query}
-                                onChange={(event) => setQuery(event.target.value)}
+                                onChange={(event) =>
+                                    setQuery(event.target.value)
+                                }
                                 placeholder="Rechercher un membre…"
                             />
                         </div>
@@ -376,18 +474,34 @@ export default function MembersAdmin({
                             >
                                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                                     <div className="flex min-w-0 items-start gap-3">
-                                        <div className="grid size-11 shrink-0 place-items-center rounded-full bg-[#e7f1e9] font-bold text-[#276644] text-lg shadow-sm">
-                                            {member.name.charAt(0).toUpperCase()}
+                                        <div className="grid size-11 shrink-0 place-items-center rounded-full bg-[#e7f1e9] text-lg font-bold text-[#276644] shadow-sm">
+                                            {member.name
+                                                .charAt(0)
+                                                .toUpperCase()}
                                         </div>
                                         <div className="min-w-0">
                                             <div className="flex flex-wrap items-center gap-2">
-                                                <h3 className="font-semibold text-[15px] text-[#17352a]">
+                                                <h3 className="text-[15px] font-semibold text-[#17352a]">
                                                     {member.name}
                                                 </h3>
                                                 {member.is_admin && (
                                                     <span className="admin-badge admin-badge--gold">
-                                                        <ShieldCheck size={12} />
+                                                        <ShieldCheck
+                                                            size={12}
+                                                        />
                                                         Admin
+                                                    </span>
+                                                )}
+                                                <span className="admin-badge admin-badge--gray">
+                                                    Niveau{' '}
+                                                    {member.niveau_hierarchie}
+                                                </span>
+                                                {member.departement && (
+                                                    <span className="admin-badge admin-badge--gray">
+                                                        {
+                                                            member.departement
+                                                                .code
+                                                        }
                                                     </span>
                                                 )}
                                                 {member.team_member ? (
@@ -396,7 +510,14 @@ export default function MembersAdmin({
                                                         Compte rattaché
                                                     </span>
                                                 ) : (
-                                                    <span className="admin-badge admin-badge--gray" style={{ background: '#eeeae2', color: '#77766f' }}>
+                                                    <span
+                                                        className="admin-badge admin-badge--gray"
+                                                        style={{
+                                                            background:
+                                                                '#eeeae2',
+                                                            color: '#77766f',
+                                                        }}
+                                                    >
                                                         <Unlink size={12} />
                                                         Non rattaché
                                                     </span>
@@ -404,19 +525,25 @@ export default function MembersAdmin({
                                             </div>
                                             <div className="mt-1.5 grid gap-1.5 text-[13px] text-[#4a5750] sm:flex sm:flex-wrap sm:gap-x-4">
                                                 <span className="inline-flex items-center gap-1.5">
-                                                    <Phone size={14} className="text-[#9aaa9f]" />
+                                                    <Phone
+                                                        size={14}
+                                                        className="text-[#9aaa9f]"
+                                                    />
                                                     {member.phone ??
                                                         'Téléphone non renseigné'}
                                                 </span>
                                                 {member.email && (
                                                     <span className="inline-flex min-w-0 items-center gap-1.5 break-all">
-                                                        <Mail size={14} className="text-[#9aaa9f] shrink-0" />
+                                                        <Mail
+                                                            size={14}
+                                                            className="shrink-0 text-[#9aaa9f]"
+                                                        />
                                                         {member.email}
                                                     </span>
                                                 )}
                                             </div>
                                             {member.team_member && (
-                                                <div className="mt-2.5 rounded-lg bg-[#f4f8f4] px-3 py-1.5 text-[12.5px] text-[#267049] inline-block border border-[#e2efe6]">
+                                                <div className="mt-2.5 inline-block rounded-lg border border-[#e2efe6] bg-[#f4f8f4] px-3 py-1.5 text-[12.5px] text-[#267049]">
                                                     <span className="font-semibold">
                                                         {member.team_member
                                                             .category ===
@@ -448,7 +575,7 @@ export default function MembersAdmin({
                                                     ? 'Votre compte ne peut pas être supprimé ici'
                                                     : 'Supprimer ce membre'
                                             }
-                                            className="admin-btn-icon hover:!bg-[#fdf2f1] hover:!text-[#c0392b] hover:!border-[#f5c6c2] disabled:cursor-not-allowed disabled:opacity-35"
+                                            className="admin-btn-icon hover:!border-[#f5c6c2] hover:!bg-[#fdf2f1] hover:!text-[#c0392b] disabled:cursor-not-allowed disabled:opacity-35"
                                         >
                                             <Trash2 size={15} />
                                         </button>
@@ -520,7 +647,11 @@ function Field({
         <div className="admin-field">
             <label>{label}</label>
             {children}
-            {error && <span className="text-[11px] font-medium text-[#c0392b]">{error}</span>}
+            {error && (
+                <span className="text-[11px] font-medium text-[#c0392b]">
+                    {error}
+                </span>
+            )}
         </div>
     );
 }

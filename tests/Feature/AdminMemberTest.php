@@ -2,8 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Models\Departement;
 use App\Models\FarmRecord;
 use App\Models\ReferenceItem;
+use App\Models\Site;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -39,6 +41,50 @@ class AdminMemberTest extends TestCase
         $this->assertNull($member->email);
         $this->assertFalse($member->is_admin);
         $this->assertTrue(Hash::check('motdepasse123', $member->password));
+    }
+
+    public function test_admin_can_assign_a_hierarchy_level_to_a_member(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true, 'niveau_hierarchie' => 1]);
+
+        $this->actingAs($admin)->post(route('admin.members.store'), [
+            'name' => 'Responsable magasin',
+            'phone' => '+243 812 345 679',
+            'email' => '',
+            'password' => 'motdepasse123',
+            'password_confirmation' => 'motdepasse123',
+            'is_admin' => true,
+            'niveau_hierarchie' => 2,
+        ])->assertSessionHasNoErrors();
+
+        $member = User::where('phone', '243812345679')->firstOrFail();
+
+        $this->assertTrue($member->is_admin);
+        $this->assertSame(2, $member->niveau_hierarchie);
+    }
+
+    public function test_admin_can_assign_a_site_and_department_to_a_member(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $site = Site::query()->create(['code' => 'KAS', 'nom' => 'Kasangulu', 'actif' => true]);
+        $department = Departement::query()->create(['code' => 'AGRI', 'nom' => 'Agriculture', 'actif' => true]);
+
+        $this->actingAs($admin)->post(route('admin.members.store'), [
+            'name' => 'Agent agricole',
+            'phone' => '+243 812 345 680',
+            'email' => '',
+            'password' => 'motdepasse123',
+            'password_confirmation' => 'motdepasse123',
+            'is_admin' => false,
+            'niveau_hierarchie' => 4,
+            'site_id' => $site->id,
+            'departement_id' => $department->id,
+        ])->assertSessionHasNoErrors();
+
+        $member = User::where('phone', '243812345680')->firstOrFail();
+
+        $this->assertSame($site->id, $member->site_id);
+        $this->assertSame($department->id, $member->departement_id);
     }
 
     public function test_admin_can_link_a_member_to_an_agricultural_team_person(): void

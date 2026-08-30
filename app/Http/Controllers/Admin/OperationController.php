@@ -13,6 +13,7 @@ use App\Models\Site;
 use App\Models\Tache;
 use App\Models\User;
 use App\Services\TacheService;
+use App\Services\VisibiliteService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -22,9 +23,12 @@ use Inertia\Response;
 
 class OperationController extends Controller
 {
-    public function index(Request $request): Response
+    public function index(Request $request, VisibiliteService $visibilite): Response
     {
         $this->ensureAdmin($request);
+        $user = $request->user();
+        $voitDossiersDisciplinaires = $user !== null && $visibilite->peutVoir($user, 'dossiers_disciplinaires');
+        $voitAudit = $user !== null && $visibilite->peutVoir($user, 'journal_audit');
 
         $tasks = Tache::query()
             ->with([
@@ -45,6 +49,21 @@ class OperationController extends Controller
             ->latest('updated_at')
             ->limit(120)
             ->get();
+        if (! $voitDossiersDisciplinaires) {
+            $tasks->each(function (Tache $task): void {
+                $task->makeHidden([
+                    'dde_reference',
+                    'dde_statut',
+                    'dde_valide_par_id',
+                    'dde_valide_le',
+                    'dde_observation',
+                ]);
+                $task->setRelation(
+                    'evenements',
+                    $task->evenements->reject(fn ($event): bool => str_starts_with($event->type, 'dde'))->values(),
+                );
+            });
+        }
         $taskStats = Tache::query()
             ->where('est_modele', false)
             ->toBase()
@@ -52,7 +71,10 @@ class OperationController extends Controller
             ->selectRaw('sum(case when statut = ? then 1 else 0 end) as open_count', [StatutTache::AFaire->value])
             ->selectRaw('sum(case when statut = ? and date(date_due) < ? then 1 else 0 end) as late_count', [StatutTache::AFaire->value, today()->toDateString()])
             ->selectRaw('sum(case when statut = ? then 1 else 0 end) as done_count', [StatutTache::Faite->value])
-            ->selectRaw('sum(case when dde_reference is not null then 1 else 0 end) as disciplinary_count')
+            ->when(
+                $voitDossiersDisciplinaires,
+                fn ($query) => $query->selectRaw('sum(case when dde_reference is not null then 1 else 0 end) as disciplinary_count'),
+            )
             ->first();
 
         return Inertia::render('admin/operations', [
@@ -61,17 +83,23 @@ class OperationController extends Controller
             'departements' => Departement::query()->where('actif', true)->orderBy('code')->get(['id', 'code', 'nom']),
             'motifs' => MotifNonExecution::query()->where('actif', true)->orderBy('ordre')->orderBy('libelle')->get(),
             'users' => User::query()->where('actif', true)->orderBy('name')->get(['id', 'name', 'niveau_hierarchie']),
-            'audit' => JournalAudit::query()
-                ->with('auteur:id,name')
-                ->latest('created_at')
-                ->limit(40)
-                ->get(),
+            'audit' => $voitAudit
+                ? JournalAudit::query()
+                    ->select(['id', 'action', 'user_nom', 'resume', 'created_at'])
+                    ->latest('created_at')
+                    ->limit(40)
+                    ->get()
+                : [],
             'stats' => [
                 'today' => (int) $taskStats->today_count,
                 'open' => (int) $taskStats->open_count,
                 'late' => (int) $taskStats->late_count,
                 'done' => (int) $taskStats->done_count,
-                'disciplinary' => (int) $taskStats->disciplinary_count,
+                'disciplinary' => $voitDossiersDisciplinaires ? (int) $taskStats->disciplinary_count : null,
+            ],
+            'visibility' => [
+                'dossiersDisciplinaires' => $voitDossiersDisciplinaires,
+                'journalAudit' => $voitAudit,
             ],
             'options' => [
                 'sources' => collect(SourceTache::cases())->map(fn (SourceTache $source): array => [
@@ -147,18 +175,20 @@ class OperationController extends Controller
         return back()->with('success', 'Non-exécution justifiée.');
     }
 
-    public function validateDde(Request $request, Tache $tache, TacheService $service): RedirectResponse
+    public function validateDde(Request $request, Tache $tache, TacheService $service, VisibiliteService $visibilite): RedirectResponse
     {
         $this->ensureAdmin($request);
+        $this->ensureDossierDisciplinaire($request, $visibilite);
         $data = $request->validate(['observation' => ['nullable', 'string', 'max:180']]);
         $service->validerDossierDisciplinaire($tache, $request->user(), $data['observation'] ?? null);
 
         return back()->with('success', 'Dossier disciplinaire confirmé et référencé.');
     }
 
-    public function requalifyDde(Request $request, Tache $tache, TacheService $service): RedirectResponse
+    public function requalifyDde(Request $request, Tache $tache, TacheService $service, VisibiliteService $visibilite): RedirectResponse
     {
         $this->ensureAdmin($request);
+        $this->ensureDossierDisciplinaire($request, $visibilite);
         $data = $request->validate(['observation' => ['required', 'string', 'max:180']]);
         $service->requalifierDossierDisciplinaire($tache, $request->user(), $data['observation']);
 
@@ -189,5 +219,13 @@ class OperationController extends Controller
     private function ensureAdmin(Request $request): void
     {
         abort_unless($request->user()?->is_admin, 403);
+    }
+
+    private function ensureDossierDisciplinaire(Request $request, VisibiliteService $visibilite): void
+    {
+        abort_unless(
+            $request->user() !== null && $visibilite->peutVoir($request->user(), 'dossiers_disciplinaires'),
+            403,
+        );
     }
 }

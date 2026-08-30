@@ -17,6 +17,12 @@ class FarmRecordController extends Controller
             ['prefix' => ['nullable', 'string', 'max:190']],
         )->validate()['prefix'] ?? '';
 
+        // farm_records est le magasin de compatibilité du vieux carnet : une
+        // ligne est un document JSON complet, unique par (utilisateur, clé), et
+        // non un registre append-only. Le présenter comme partagé reviendrait à
+        // choisir arbitrairement le document d'un collègue et cacher les autres.
+        // Les données réellement communes passent par les tables normalisées,
+        // le registre et les API terrain dédiées.
         $keys = FarmRecord::query()
             ->whereBelongsTo($request->user())
             ->when($prefix !== '', fn ($query) => $query->where('record_key', 'like', $prefix.'%'))

@@ -13,6 +13,17 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
+/**
+ * @property int $id
+ * @property string $reference
+ * @property SourceTache $source
+ * @property string $titre
+ * @property int|null $responsable_id
+ * @property int|null $departement_id
+ * @property int|null $site_id
+ * @property CarbonInterface $date_due
+ * @property StatutTache $statut
+ */
 class Tache extends Model
 {
     use Auditable;

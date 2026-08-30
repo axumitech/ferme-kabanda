@@ -8,12 +8,17 @@ use App\Http\Controllers\Admin\ProcessController;
 use App\Http\Controllers\Admin\ReferenceItemController;
 use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\FarmJournalController;
 use App\Http\Controllers\FarmRecordController;
 use App\Http\Controllers\FieldAppController;
 use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\MaterialAssignmentController;
 use App\Http\Controllers\MyDayController;
 use App\Http\Controllers\ProductStockController;
+use App\Http\Controllers\SharedRegistryController;
+use App\Http\Controllers\Terrain\CarnetController;
+use App\Http\Controllers\Terrain\ReferenceController as TerrainReferenceController;
+use App\Http\Controllers\Terrain\SynchronisationController as TerrainSynchronisationController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', fn () => redirect()->route(auth()->check() ? 'dashboard' : 'login'))->name('home');
@@ -24,6 +29,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('journee/taches/{tache}/complete', [MyDayController::class, 'complete'])->name('my-day.tasks.complete');
     Route::post('journee/taches/{tache}/justify', [MyDayController::class, 'justify'])->name('my-day.tasks.justify');
     Route::get('terrain', FieldAppController::class)->name('field-app');
+    Route::prefix('terrain/carnet')->name('terrain.carnet.')->group(function (): void {
+        Route::get('/', CarnetController::class)->name('index');
+        Route::get('api/reference', TerrainReferenceController::class)->name('reference');
+        Route::post('api/synchroniser', TerrainSynchronisationController::class)->name('synchroniser');
+    });
+    Route::get('journal-ferme', FarmJournalController::class)->name('farm-journal');
+    Route::get('registre-ferme', SharedRegistryController::class)->name('shared-registry');
 
     Route::get('farm-data', [FarmRecordController::class, 'index'])->name('farm-data.index');
     Route::get('farm-data/{recordKey}', [FarmRecordController::class, 'show'])->name('farm-data.show');

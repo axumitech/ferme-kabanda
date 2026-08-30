@@ -12,6 +12,7 @@ use App\Models\ReferenceItem;
 use App\Models\Unite;
 use App\Models\User;
 use App\Services\MagasinService;
+use App\Services\VisibiliteService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -23,14 +24,16 @@ use Inertia\Response;
 
 class InventoryController extends Controller
 {
-    public function index(Request $request): Response
+    public function index(Request $request, VisibiliteService $visibilite): Response
     {
         $this->ensureAdmin($request);
+        $user = $request->user();
+        $voitValeursStock = $user !== null && $visibilite->peutVoir($user, 'valeurs_stock');
 
         $items = Article::query()
             ->with(['uniteUsage:id,code,nom,dimension,vers_base,conditionnement', 'uniteAchat:id,code,nom,dimension,vers_base,conditionnement'])
             ->orderByDesc('actif')->orderBy('code')->get()
-            ->map(fn (Article $article): array => $this->articlePayload($article));
+            ->map(fn (Article $article): array => $this->articlePayload($article, $voitValeursStock));
         $stocks = ProductStock::query()
             ->with('user:id,name')->orderByDesc('active')->orderBy('product_name')->get();
         $lowItemsCount = Article::query()
@@ -39,11 +42,13 @@ class InventoryController extends Controller
             ->whereNotNull('articles.seuil_min')
             ->whereRaw('articles.quantite_base <= articles.seuil_min * unite_usage.vers_base')
             ->count('articles.id');
-        $inventoryValue = Article::query()
-            ->join('unites as unite_achat', 'unite_achat.id', '=', 'articles.unite_achat_id')
-            ->where('articles.actif', true)
-            ->selectRaw('coalesce(sum((articles.quantite_base / nullif(unite_achat.vers_base, 0)) * coalesce(articles.prix_unitaire, 0)), 0) as total')
-            ->value('total');
+        $inventoryValue = $voitValeursStock
+            ? Article::query()
+                ->join('unites as unite_achat', 'unite_achat.id', '=', 'articles.unite_achat_id')
+                ->where('articles.actif', true)
+                ->selectRaw('coalesce(sum((articles.quantite_base / nullif(unite_achat.vers_base, 0)) * coalesce(articles.prix_unitaire, 0)), 0) as total')
+                ->value('total')
+            : null;
 
         return Inertia::render('admin/inventory', [
             'items' => $items,
@@ -77,11 +82,14 @@ class InventoryController extends Controller
                 ->orderBy('label')->get(['id', 'label']),
             'stats' => [
                 'activeItems' => Article::query()->where('actif', true)->count(),
-                'inventoryValue' => (float) $inventoryValue,
+                'inventoryValue' => $inventoryValue === null ? null : (float) $inventoryValue,
                 'lowItems' => $lowItemsCount,
                 'activeProducts' => ProductStock::query()->where('active', true)->count(),
                 'activeAssignments' => MaterialAssignment::query()->where('is_replaced', false)->count(),
                 'expiredAssignments' => MaterialAssignment::query()->where('is_replaced', false)->whereDate('expires_on', '<', today())->count(),
+            ],
+            'visibility' => [
+                'stockValues' => $voitValeursStock,
             ],
         ]);
     }
@@ -287,17 +295,15 @@ class InventoryController extends Controller
     }
 
     /** @return array<string, mixed> */
-    private function articlePayload(Article $article): array
+    private function articlePayload(Article $article, bool $inclureValeurs): array
     {
-        return [
+        $payload = [
             'id' => $article->id,
             'code' => $article->code,
             'name' => $article->libelle,
             'unit' => $article->uniteUsage->code,
             'quantity_on_hand' => number_format($article->stockUsage(), 3, '.', ''),
-            'unit_price' => (string) ($article->prix_unitaire ?? '0'),
             'minimum_quantity' => $article->seuil_min,
-            'cost_center' => $article->centre_cout,
             'active' => $article->actif,
             'user' => ['id' => 0, 'name' => 'Magasin central'],
             'category' => [
@@ -305,6 +311,13 @@ class InventoryController extends Controller
                 'name' => Article::CATEGORIES[$article->categorie] ?? $article->categorie,
             ],
         ];
+
+        if ($inclureValeurs) {
+            $payload['unit_price'] = (string) ($article->prix_unitaire ?? '0');
+            $payload['cost_center'] = $article->centre_cout;
+        }
+
+        return $payload;
     }
 
     private function resolveUnit(string $rawUnit): Unite

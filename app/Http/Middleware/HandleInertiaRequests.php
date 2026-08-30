@@ -2,6 +2,8 @@
 
 namespace App\Http\Middleware;
 
+use App\Enums\StatutTache;
+use App\Models\Tache;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -47,6 +49,20 @@ class HandleInertiaRequests extends Middleware
                 ['value' => 'en', 'label' => 'English'],
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
+            'fkn' => [
+                // Le badge est volontairement personnel : il compte les actions
+                // attendues de la personne, jamais le volume de la ferme.
+                'actionsPending' => fn (): int => $request->user()
+                    ? Tache::query()
+                        ->where('est_modele', false)
+                        ->where('statut', StatutTache::AFaire)
+                        ->where(function ($query) use ($request): void {
+                            $query->where('responsable_id', $request->user()->id)
+                                ->orWhereHas('intervenants', fn ($intervenants) => $intervenants->where('user_id', $request->user()->id));
+                        })
+                        ->count()
+                    : 0,
+            ],
         ];
     }
 }

@@ -10,6 +10,7 @@ use App\Models\MapFeature;
 use App\Models\ProductStock;
 use App\Models\ReferenceItem;
 use App\Models\Tache;
+use App\Services\FluxActiviteService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -17,7 +18,7 @@ use Inertia\Response;
 
 class DashboardController extends Controller
 {
-    public function __invoke(Request $request): Response
+    public function __invoke(Request $request, FluxActiviteService $flux): Response
     {
         $user = $request->user();
         $taskScope = fn (Builder $query): Builder => $query
@@ -93,6 +94,7 @@ class DashboardController extends Controller
                 ->limit(6)
                 ->get(['id', 'name', 'feature_type', 'area_ha', 'area_m2']),
             'referencesCount' => ReferenceItem::query()->where('active', true)->count(),
+            'latestActivity' => $flux->journee(null, 10),
         ]);
     }
 }

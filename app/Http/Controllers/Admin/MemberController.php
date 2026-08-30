@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Admin;
 
 use App\Actions\DeactivateUser;
 use App\Http\Controllers\Controller;
+use App\Models\Departement;
 use App\Models\ReferenceItem;
+use App\Models\Site;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -22,8 +24,8 @@ class MemberController extends Controller
 
         return Inertia::render('admin/members', [
             'members' => User::query()
-                ->select('id', 'name', 'email', 'phone', 'reference_item_id', 'is_admin', 'created_at')
-                ->with('teamMember:id,category,label')
+                ->select('id', 'name', 'email', 'phone', 'reference_item_id', 'site_id', 'departement_id', 'is_admin', 'niveau_hierarchie', 'created_at')
+                ->with(['teamMember:id,category,label', 'site:id,code,nom', 'departement:id,code,nom'])
                 ->orderByDesc('is_admin')
                 ->orderBy('name')
                 ->get(),
@@ -34,6 +36,8 @@ class MemberController extends Controller
                 ->orderBy('sort_order')
                 ->orderBy('label')
                 ->get(['id', 'category', 'label', 'active']),
+            'sites' => Site::query()->where('actif', true)->orderBy('code')->get(['id', 'code', 'nom']),
+            'departements' => Departement::query()->where('actif', true)->orderBy('code')->get(['id', 'code', 'nom']),
             'initialReferenceItemId' => $request->integer('reference_item_id') ?: null,
         ]);
     }
@@ -95,6 +99,8 @@ class MemberController extends Controller
     /** @return array<string, mixed> */
     private function validated(Request $request, ?User $member = null): array
     {
+        $niveauParDefaut = $member !== null ? $member->niveau_hierarchie : 4;
+
         $request->merge([
             'name' => trim((string) $request->input('name')),
             'phone' => User::normalizePhone($request->input('phone')),
@@ -104,6 +110,11 @@ class MemberController extends Controller
             'reference_item_id' => filled($request->input('reference_item_id'))
                 ? $request->integer('reference_item_id')
                 : null,
+            'site_id' => filled($request->input('site_id')) ? $request->integer('site_id') : null,
+            'departement_id' => filled($request->input('departement_id')) ? $request->integer('departement_id') : null,
+            'niveau_hierarchie' => filled($request->input('niveau_hierarchie'))
+                ? $request->integer('niveau_hierarchie')
+                : $niveauParDefaut,
         ]);
 
         return $request->validate([
@@ -118,8 +129,11 @@ class MemberController extends Controller
                 ),
                 Rule::unique(User::class, 'reference_item_id')->withoutTrashed()->ignore($member),
             ],
+            'site_id' => ['nullable', 'integer', Rule::exists(Site::class, 'id')->where('actif', true)],
+            'departement_id' => ['nullable', 'integer', Rule::exists(Departement::class, 'id')->where('actif', true)],
             'password' => [$member ? 'nullable' : 'required', 'confirmed', Password::defaults()],
             'is_admin' => ['required', 'boolean'],
+            'niveau_hierarchie' => ['required', 'integer', 'between:1,4'],
         ]);
     }
 

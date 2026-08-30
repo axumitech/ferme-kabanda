@@ -3,9 +3,21 @@
 namespace App\Models;
 
 use App\Concerns\Auditable;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * @property int $id
+ * @property string $reference
+ * @property string $type
+ * @property string $objet
+ * @property string|null $nouvel_article
+ * @property string|null $montant
+ * @property string|null $quantite
+ * @property string $statut
+ * @property CarbonInterface|null $created_at
+ */
 class Requisition extends Model
 {
     use Auditable;
@@ -30,5 +42,23 @@ class Requisition extends Model
     public function tacheService(): BelongsTo
     {
         return $this->belongsTo(Tache::class, 'tache_service_id');
+    }
+
+    /** @return BelongsTo<User, $this> */
+    public function demandeur(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'demandeur_id');
+    }
+
+    /** @return BelongsTo<Site, $this> */
+    public function site(): BelongsTo
+    {
+        return $this->belongsTo(Site::class);
+    }
+
+    /** @return BelongsTo<Departement, $this> */
+    public function departement(): BelongsTo
+    {
+        return $this->belongsTo(Departement::class);
     }
 }

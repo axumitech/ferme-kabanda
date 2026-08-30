@@ -1,5 +1,13 @@
 import { Link, usePage } from '@inertiajs/react';
-import { ClipboardCheck, LayoutGrid, Settings, Sprout } from 'lucide-react';
+import {
+    ClipboardCheck,
+    LayoutGrid,
+    Newspaper,
+    Settings,
+    Share2,
+    Smartphone,
+    Sprout,
+} from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
@@ -12,17 +20,28 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import type { NavItem } from '@/types';
 import { useI18n } from '@/lib/i18n';
+import type { NavItem } from '@/types';
 
 export function AppSidebar() {
-    const { auth } = usePage().props;
+    const { auth, fkn } = usePage().props;
     const { t } = useI18n();
     const user = auth.user as { is_admin?: boolean } | null;
     const mainNavItems: NavItem[] = [
         { title: t('cockpit'), href: '/dashboard', icon: LayoutGrid },
-        { title: t('myDay'), href: '/journee', icon: ClipboardCheck },
+        {
+            title: `${t('myDay')}${(fkn as { actionsPending?: number } | undefined)?.actionsPending ? ` (${(fkn as { actionsPending: number }).actionsPending})` : ''}`,
+            href: '/journee',
+            icon: ClipboardCheck,
+        },
+        {
+            title: 'Journal de la ferme',
+            href: '/journal-ferme',
+            icon: Newspaper,
+        },
+        { title: 'Registre partagé', href: '/registre-ferme', icon: Share2 },
         { title: t('field'), href: '/terrain', icon: Sprout },
+        { title: 'Carnet terrain', href: '/terrain/carnet', icon: Smartphone },
     ];
     const navItems = user?.is_admin
         ? [

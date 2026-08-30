@@ -1,9 +1,5 @@
-const CACHE_NAME = 'fkn-pwa-v1';
-const APP_SHELL = [
-    '/',
-    '/dashboard',
-    '/journee',
-    '/terrain',
+const CACHE_NAME = 'fkn-pwa-v3';
+const PUBLIC_ASSETS = [
     '/offline.html',
     '/favicon.png',
     '/apple-touch-icon.png',
@@ -13,7 +9,7 @@ const APP_SHELL = [
 
 self.addEventListener('install', (event) => {
     event.waitUntil(
-        caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)).then(() => self.skipWaiting())
+        caches.open(CACHE_NAME).then((cache) => cache.addAll(PUBLIC_ASSETS)).then(() => self.skipWaiting())
     );
 });
 
@@ -36,22 +32,21 @@ self.addEventListener('fetch', (event) => {
     if (request.mode === 'navigate') {
         event.respondWith(
             fetch(request)
-                .then((response) => {
-                    const copy = response.clone();
-                    caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-                    return response;
-                })
-                .catch(async () => (await caches.match(request)) || caches.match('/offline.html'))
+                .catch(() => caches.match('/offline.html'))
         );
         return;
     }
 
-    if (url.pathname.startsWith('/build/') || APP_SHELL.includes(url.pathname)) {
+    if (url.pathname.startsWith('/build/') || PUBLIC_ASSETS.includes(url.pathname)) {
         event.respondWith(
             caches.match(request).then((cached) =>
-                cached || fetch(request).then((response) => {
+                cached || fetch(request).then(async (response) => {
+                    if (!response.ok) {
+                        return response;
+                    }
+
                     const copy = response.clone();
-                    caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+                    await caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
                     return response;
                 })
             )

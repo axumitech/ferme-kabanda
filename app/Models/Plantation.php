@@ -3,10 +3,20 @@
 namespace App\Models;
 
 use App\Concerns\Auditable;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * @property int $id
+ * @property string $reference
+ * @property string $lieu
+ * @property CarbonInterface $j0
+ * @property string|null $quantite
+ * @property string|null $unite
+ * @property CarbonInterface|null $created_at
+ */
 class Plantation extends Model
 {
     use Auditable;
@@ -19,6 +29,12 @@ class Plantation extends Model
     public function culture(): BelongsTo
     {
         return $this->belongsTo(Culture::class);
+    }
+
+    /** @return BelongsTo<User, $this> */
+    public function createur(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'cree_par_id');
     }
 
     /** @return HasMany<Recolte, $this> */

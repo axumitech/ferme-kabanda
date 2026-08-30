@@ -26,7 +26,7 @@ type Item = {
     name: string;
     unit: string;
     quantity_on_hand: string;
-    unit_price: string;
+    unit_price?: string | null;
     minimum_quantity?: string | null;
     cost_center?: string | null;
     active: boolean;
@@ -85,11 +85,14 @@ type Props = {
     materials: Reference[];
     stats: {
         activeItems: number;
-        inventoryValue: number;
+        inventoryValue: number | null;
         lowItems: number;
         activeProducts: number;
         activeAssignments: number;
         expiredAssignments: number;
+    };
+    visibility: {
+        stockValues: boolean;
     };
 };
 
@@ -134,8 +137,12 @@ export default function InventoryAdmin(props: Props) {
     >('items');
     const [query, setQuery] = useState('');
     const [showForm, setShowForm] = useState(false);
-    const [movementTarget, setMovementTarget] = useState<MovementTarget | null>(null);
-    const [endingAssignment, setEndingAssignment] = useState<Assignment | null>(null);
+    const [movementTarget, setMovementTarget] = useState<MovementTarget | null>(
+        null,
+    );
+    const [endingAssignment, setEndingAssignment] = useState<Assignment | null>(
+        null,
+    );
     const today = new Date().toISOString().slice(0, 10);
     const defaultUser = props.users[0]?.id ?? 0;
 
@@ -207,10 +214,14 @@ export default function InventoryAdmin(props: Props) {
         setEndingAssignment(null);
         movementForm.setData({ quantity_change: '', reason: '' });
     };
-    const archive = async (kind: 'items' | 'products', id: number, label: string) => {
+    const archive = async (
+        kind: 'items' | 'products',
+        id: number,
+        label: string,
+    ) => {
         if (
             await confirm({
-                title: 'Confirmation d\'archivage',
+                title: "Confirmation d'archivage",
                 description: `Archiver « ${label} » ? Le stock doit être à zéro et l’historique sera conservé.`,
                 confirmText: 'Archiver',
                 variant: 'destructive',
@@ -230,25 +241,31 @@ export default function InventoryAdmin(props: Props) {
         event.preventDefault();
         if (!movementTarget) return;
 
-        movementForm.post(`/admin/inventory/${movementTarget.kind}/${movementTarget.id}/adjust`, {
-            preserveScroll: true,
-            onSuccess: () => {
-                movementForm.reset('quantity_change', 'reason');
-                setMovementTarget(null);
+        movementForm.post(
+            `/admin/inventory/${movementTarget.kind}/${movementTarget.id}/adjust`,
+            {
+                preserveScroll: true,
+                onSuccess: () => {
+                    movementForm.reset('quantity_change', 'reason');
+                    setMovementTarget(null);
+                },
             },
-        });
+        );
     };
     const submitAssignmentEnd = (event: React.FormEvent) => {
         event.preventDefault();
         if (!endingAssignment) return;
 
-        assignmentEndForm.post(`/admin/inventory/assignments/${endingAssignment.id}/end`, {
-            preserveScroll: true,
-            onSuccess: () => {
-                assignmentEndForm.reset('reason');
-                setEndingAssignment(null);
+        assignmentEndForm.post(
+            `/admin/inventory/assignments/${endingAssignment.id}/end`,
+            {
+                preserveScroll: true,
+                onSuccess: () => {
+                    assignmentEndForm.reset('reason');
+                    setEndingAssignment(null);
+                },
             },
-        });
+        );
     };
 
     const cards = [
@@ -257,11 +274,15 @@ export default function InventoryAdmin(props: Props) {
             value: props.stats.activeItems,
             icon: Boxes,
         },
-        {
-            label: 'Valeur magasin',
-            value: `${props.stats.inventoryValue.toFixed(0)} USD`,
-            icon: Warehouse,
-        },
+        ...(props.visibility.stockValues && props.stats.inventoryValue !== null
+            ? [
+                  {
+                      label: 'Valeur magasin',
+                      value: `${props.stats.inventoryValue.toFixed(0)} USD`,
+                      icon: Warehouse,
+                  },
+              ]
+            : []),
         {
             label: 'Alertes stock',
             value: props.stats.lowItems,
@@ -293,7 +314,7 @@ export default function InventoryAdmin(props: Props) {
         >
             <ConfirmDialog />
             <Head title="Stocks et matériels — Administration" />
-            
+
             <div className="admin-animate-in">
                 <div className="admin-stats-grid mb-6">
                     {cards.map(({ label, value, icon: Icon, danger }) => (
@@ -302,8 +323,14 @@ export default function InventoryAdmin(props: Props) {
                             className={`admin-stat-card ${danger ? 'border-red-300 bg-red-50/30' : ''}`}
                         >
                             <div className="admin-stat-header">
-                                <span className={`admin-stat-label ${danger ? 'text-red-700 font-semibold' : ''}`}>{label}</span>
-                                <div className={`admin-stat-icon ${danger ? 'text-red-600 bg-red-100' : ''}`}>
+                                <span
+                                    className={`admin-stat-label ${danger ? 'font-semibold text-red-700' : ''}`}
+                                >
+                                    {label}
+                                </span>
+                                <div
+                                    className={`admin-stat-icon ${danger ? 'bg-red-100 text-red-600' : ''}`}
+                                >
                                     <Icon size={16} />
                                 </div>
                             </div>
@@ -370,8 +397,14 @@ export default function InventoryAdmin(props: Props) {
                         className="admin-form-panel mb-6"
                     >
                         <div className="mb-5 rounded-lg border border-[#dfe6dc] bg-[#fbfaf7] p-4 text-sm leading-6 text-[#425047]">
-                            Un article appartient maintenant au magasin central. Les entrées et sorties se font ensuite depuis le bouton
-                            <span className="font-semibold text-[#17352a]"> Entrée / sortie</span>, avec un motif obligatoire.
+                            Un article appartient maintenant au magasin central.
+                            Les entrées et sorties se font ensuite depuis le
+                            bouton
+                            <span className="font-semibold text-[#17352a]">
+                                {' '}
+                                Entrée / sortie
+                            </span>
+                            , avec un motif obligatoire.
                         </div>
                         <div className="admin-form-grid md:grid-cols-3 xl:grid-cols-5">
                             <FormSelect
@@ -379,7 +412,10 @@ export default function InventoryAdmin(props: Props) {
                                 value={itemForm.data.category_code}
                                 onChange={(v) => {
                                     itemForm.setData('category_code', v);
-                                    itemForm.setData('category_name', categories[v]);
+                                    itemForm.setData(
+                                        'category_name',
+                                        categories[v],
+                                    );
                                 }}
                                 options={Object.entries(categories)}
                             />
@@ -403,22 +439,30 @@ export default function InventoryAdmin(props: Props) {
                             <FormNumber
                                 label="Quantité initiale"
                                 value={itemForm.data.quantity}
-                                onChange={(v) => itemForm.setData('quantity', v)}
+                                onChange={(v) =>
+                                    itemForm.setData('quantity', v)
+                                }
                             />
                             <FormNumber
                                 label="Prix unitaire USD"
                                 value={itemForm.data.unit_price}
-                                onChange={(v) => itemForm.setData('unit_price', v)}
+                                onChange={(v) =>
+                                    itemForm.setData('unit_price', v)
+                                }
                             />
                             <FormNumber
                                 label="Seuil d’alerte"
                                 value={itemForm.data.minimum_quantity}
-                                onChange={(v) => itemForm.setData('minimum_quantity', v)}
+                                onChange={(v) =>
+                                    itemForm.setData('minimum_quantity', v)
+                                }
                             />
                             <FormInput
                                 label="Centre de coût"
                                 value={itemForm.data.cost_center}
-                                onChange={(v) => itemForm.setData('cost_center', v)}
+                                onChange={(v) =>
+                                    itemForm.setData('cost_center', v)
+                                }
                             />
                             <div className="flex flex-col justify-end">
                                 <Submit
@@ -448,13 +492,17 @@ export default function InventoryAdmin(props: Props) {
                             <FormSelect
                                 label="Responsable / compte"
                                 value={productForm.data.user_id}
-                                onChange={(v) => productForm.setData('user_id', Number(v))}
+                                onChange={(v) =>
+                                    productForm.setData('user_id', Number(v))
+                                }
                                 options={props.users.map((u) => [u.id, u.name])}
                             />
                             <FormInput
                                 label="Produit"
                                 value={productForm.data.product_name}
-                                onChange={(v) => productForm.setData('product_name', v)}
+                                onChange={(v) =>
+                                    productForm.setData('product_name', v)
+                                }
                             />
                             <FormSelect
                                 label="Unité"
@@ -465,12 +513,16 @@ export default function InventoryAdmin(props: Props) {
                             <FormNumber
                                 label="Quantité initiale"
                                 value={productForm.data.quantity}
-                                onChange={(v) => productForm.setData('quantity', v)}
+                                onChange={(v) =>
+                                    productForm.setData('quantity', v)
+                                }
                             />
                             <FormNumber
                                 label="Seuil d’alerte"
                                 value={productForm.data.minimum_quantity}
-                                onChange={(v) => productForm.setData('minimum_quantity', v)}
+                                onChange={(v) =>
+                                    productForm.setData('minimum_quantity', v)
+                                }
                             />
                             <div className="flex flex-col justify-end">
                                 <Submit
@@ -503,46 +555,74 @@ export default function InventoryAdmin(props: Props) {
                             <FormSelect
                                 label="Compte responsable"
                                 value={assignmentForm.data.user_id}
-                                onChange={(v) => assignmentForm.setData('user_id', Number(v))}
+                                onChange={(v) =>
+                                    assignmentForm.setData('user_id', Number(v))
+                                }
                                 options={props.users.map((u) => [u.id, u.name])}
                             />
                             <FormSelect
                                 label="Personne"
-                                value={assignmentForm.data.assignee_reference_item_id}
-                                onChange={(v) =>
-                                    assignmentForm.setData('assignee_reference_item_id', Number(v))
+                                value={
+                                    assignmentForm.data
+                                        .assignee_reference_item_id
                                 }
-                                options={props.people.map((p) => [p.id, p.label])}
+                                onChange={(v) =>
+                                    assignmentForm.setData(
+                                        'assignee_reference_item_id',
+                                        Number(v),
+                                    )
+                                }
+                                options={props.people.map((p) => [
+                                    p.id,
+                                    p.label,
+                                ])}
                             />
                             <FormSelect
                                 label="Matériel / EPI"
-                                value={assignmentForm.data.material_reference_item_id}
-                                onChange={(v) =>
-                                    assignmentForm.setData('material_reference_item_id', Number(v))
+                                value={
+                                    assignmentForm.data
+                                        .material_reference_item_id
                                 }
-                                options={props.materials.map((m) => [m.id, m.label])}
+                                onChange={(v) =>
+                                    assignmentForm.setData(
+                                        'material_reference_item_id',
+                                        Number(v),
+                                    )
+                                }
+                                options={props.materials.map((m) => [
+                                    m.id,
+                                    m.label,
+                                ])}
                             />
                             <FormInput
                                 label="Taille"
                                 value={assignmentForm.data.size}
-                                onChange={(v) => assignmentForm.setData('size', v)}
+                                onChange={(v) =>
+                                    assignmentForm.setData('size', v)
+                                }
                             />
                             <FormInput
                                 label="Date de remise"
                                 type="date"
                                 value={assignmentForm.data.assigned_on}
-                                onChange={(v) => assignmentForm.setData('assigned_on', v)}
+                                onChange={(v) =>
+                                    assignmentForm.setData('assigned_on', v)
+                                }
                             />
                             <FormInput
                                 label="Expiration"
                                 type="date"
                                 value={assignmentForm.data.expires_on}
-                                onChange={(v) => assignmentForm.setData('expires_on', v)}
+                                onChange={(v) =>
+                                    assignmentForm.setData('expires_on', v)
+                                }
                             />
                             <FormInput
                                 label="Motif / observation"
                                 value={assignmentForm.data.reason}
-                                onChange={(v) => assignmentForm.setData('reason', v)}
+                                onChange={(v) =>
+                                    assignmentForm.setData('reason', v)
+                                }
                             />
                             <div className="flex flex-col justify-end">
                                 <Submit
@@ -555,16 +635,28 @@ export default function InventoryAdmin(props: Props) {
                 )}
 
                 {movementTarget && (
-                    <form onSubmit={submitMovement} className="admin-form-panel mb-6 border-[#cfe0cf] bg-[#fbfff9]">
+                    <form
+                        onSubmit={submitMovement}
+                        className="admin-form-panel mb-6 border-[#cfe0cf] bg-[#fbfff9]"
+                    >
                         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                             <div>
-                                <div className="admin-section-eyebrow">Mouvement magasin</div>
-                                <h3 className="admin-section-title text-[20px]">{movementTarget.label}</h3>
+                                <div className="admin-section-eyebrow">
+                                    Mouvement magasin
+                                </div>
+                                <h3 className="admin-section-title text-[20px]">
+                                    {movementTarget.label}
+                                </h3>
                                 <p className="admin-section-desc mb-0">
-                                    Saisissez une quantité positive pour une entrée, négative pour une sortie.
+                                    Saisissez une quantité positive pour une
+                                    entrée, négative pour une sortie.
                                 </p>
                             </div>
-                            <button type="button" className="admin-btn-secondary" onClick={() => setMovementTarget(null)}>
+                            <button
+                                type="button"
+                                className="admin-btn-secondary"
+                                onClick={() => setMovementTarget(null)}
+                            >
                                 Annuler
                             </button>
                         </div>
@@ -576,12 +668,22 @@ export default function InventoryAdmin(props: Props) {
                                     type="number"
                                     step="0.001"
                                     value={movementForm.data.quantity_change}
-                                    onChange={(event) => movementForm.setData('quantity_change', event.target.value)}
+                                    onChange={(event) =>
+                                        movementForm.setData(
+                                            'quantity_change',
+                                            event.target.value,
+                                        )
+                                    }
                                     placeholder={`Ex: 10 ou -3${movementTarget.unit ? ` ${movementTarget.unit}` : ''}`}
                                 />
-                                <p className="admin-form-hint">Quantité positive = entrée, quantité négative = sortie.</p>
+                                <p className="admin-form-hint">
+                                    Quantité positive = entrée, quantité
+                                    négative = sortie.
+                                </p>
                                 {movementForm.errors.quantity_change && (
-                                    <span className="admin-form-error">{movementForm.errors.quantity_change}</span>
+                                    <span className="admin-form-error">
+                                        {movementForm.errors.quantity_change}
+                                    </span>
                                 )}
                             </div>
                             <div className="admin-field">
@@ -589,16 +691,30 @@ export default function InventoryAdmin(props: Props) {
                                 <input
                                     required
                                     value={movementForm.data.reason}
-                                    onChange={(event) => movementForm.setData('reason', event.target.value)}
+                                    onChange={(event) =>
+                                        movementForm.setData(
+                                            'reason',
+                                            event.target.value,
+                                        )
+                                    }
                                     placeholder="Réception fournisseur, sortie terrain, correction inventaire..."
                                 />
-                                <p className="admin-form-hint">Le motif rend le mouvement traçable et auditable.</p>
+                                <p className="admin-form-hint">
+                                    Le motif rend le mouvement traçable et
+                                    auditable.
+                                </p>
                                 {movementForm.errors.reason && (
-                                    <span className="admin-form-error">{movementForm.errors.reason}</span>
+                                    <span className="admin-form-error">
+                                        {movementForm.errors.reason}
+                                    </span>
                                 )}
                             </div>
                             <div className="flex flex-col justify-end">
-                                <button type="submit" disabled={movementForm.processing} className="admin-btn-submit h-11 px-4">
+                                <button
+                                    type="submit"
+                                    disabled={movementForm.processing}
+                                    className="admin-btn-submit h-11 px-4"
+                                >
                                     Enregistrer
                                 </button>
                             </div>
@@ -607,16 +723,28 @@ export default function InventoryAdmin(props: Props) {
                 )}
 
                 {endingAssignment && (
-                    <form onSubmit={submitAssignmentEnd} className="admin-form-panel mb-6 border-amber-200 bg-amber-50/50">
+                    <form
+                        onSubmit={submitAssignmentEnd}
+                        className="admin-form-panel mb-6 border-amber-200 bg-amber-50/50"
+                    >
                         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                             <div>
-                                <div className="admin-section-eyebrow">Retrait matériel</div>
-                                <h3 className="admin-section-title text-[20px]">{endingAssignment.material_name}</h3>
+                                <div className="admin-section-eyebrow">
+                                    Retrait matériel
+                                </div>
+                                <h3 className="admin-section-title text-[20px]">
+                                    {endingAssignment.material_name}
+                                </h3>
                                 <p className="admin-section-desc mb-0">
-                                    Retrait à {endingAssignment.assignee_name}. Le motif sera conservé dans l’historique.
+                                    Retrait à {endingAssignment.assignee_name}.
+                                    Le motif sera conservé dans l’historique.
                                 </p>
                             </div>
-                            <button type="button" className="admin-btn-secondary" onClick={() => setEndingAssignment(null)}>
+                            <button
+                                type="button"
+                                className="admin-btn-secondary"
+                                onClick={() => setEndingAssignment(null)}
+                            >
                                 Annuler
                             </button>
                         </div>
@@ -626,16 +754,30 @@ export default function InventoryAdmin(props: Props) {
                                 <input
                                     required
                                     value={assignmentEndForm.data.reason}
-                                    onChange={(event) => assignmentEndForm.setData('reason', event.target.value)}
+                                    onChange={(event) =>
+                                        assignmentEndForm.setData(
+                                            'reason',
+                                            event.target.value,
+                                        )
+                                    }
                                     placeholder="Remplacement, fin de contrat, matériel rendu..."
                                 />
-                                <p className="admin-form-hint">Ce retrait n’efface pas l’attribution : il clôture son historique.</p>
+                                <p className="admin-form-hint">
+                                    Ce retrait n’efface pas l’attribution : il
+                                    clôture son historique.
+                                </p>
                                 {assignmentEndForm.errors.reason && (
-                                    <span className="admin-form-error">{assignmentEndForm.errors.reason}</span>
+                                    <span className="admin-form-error">
+                                        {assignmentEndForm.errors.reason}
+                                    </span>
                                 )}
                             </div>
                             <div className="flex flex-col justify-end">
-                                <button type="submit" disabled={assignmentEndForm.processing} className="admin-btn-submit h-11 px-4">
+                                <button
+                                    type="submit"
+                                    disabled={assignmentEndForm.processing}
+                                    className="admin-btn-submit h-11 px-4"
+                                >
                                     Confirmer le retrait
                                 </button>
                             </div>
@@ -657,15 +799,32 @@ export default function InventoryAdmin(props: Props) {
                 {tab === 'items' && (
                     <ItemTable
                         items={filteredItems}
-                        onAdjust={(i) => adjust({ kind: 'items', id: i.id, label: i.name, unit: i.unit })}
+                        showStockValues={props.visibility.stockValues}
+                        onAdjust={(i) =>
+                            adjust({
+                                kind: 'items',
+                                id: i.id,
+                                label: i.name,
+                                unit: i.unit,
+                            })
+                        }
                         onArchive={(i) => archive('items', i.id, i.name)}
                     />
                 )}
                 {tab === 'products' && (
                     <ProductTable
                         stocks={filteredStocks}
-                        onAdjust={(s) => adjust({ kind: 'products', id: s.id, label: s.product_name, unit: s.unit })}
-                        onArchive={(s) => archive('products', s.id, s.product_name)}
+                        onAdjust={(s) =>
+                            adjust({
+                                kind: 'products',
+                                id: s.id,
+                                label: s.product_name,
+                                unit: s.unit,
+                            })
+                        }
+                        onArchive={(s) =>
+                            archive('products', s.id, s.product_name)
+                        }
                     />
                 )}
                 {tab === 'assignments' && (
@@ -779,19 +938,17 @@ function Submit({ processing, label }: { processing: boolean; label: string }) {
     );
 }
 function Empty() {
-    return (
-        <div className="admin-empty">
-            Aucune donnée à afficher.
-        </div>
-    );
+    return <div className="admin-empty">Aucune donnée à afficher.</div>;
 }
 
 function ItemTable({
     items,
+    showStockValues,
     onAdjust,
     onArchive,
 }: {
     items: Item[];
+    showStockValues: boolean;
     onAdjust: (item: Item) => void;
     onArchive: (item: Item) => void;
 }) {
@@ -801,7 +958,7 @@ function ItemTable({
                 'Article',
                 'Responsable',
                 'Quantité',
-                'Prix / valeur',
+                ...(showStockValues ? ['Prix / valeur'] : []),
                 'Seuil',
                 'Actions',
             ]}
@@ -816,39 +973,60 @@ function ItemTable({
                     return (
                         <tr
                             key={item.id}
-                            className={`border-b border-[#e5e1d8] last:border-0 hover:bg-[#f9f8f5] transition-colors ${!item.active ? 'opacity-50 bg-[#faf9f5]' : ''}`}
+                            className={`border-b border-[#e5e1d8] transition-colors last:border-0 hover:bg-[#f9f8f5] ${!item.active ? 'bg-[#faf9f5] opacity-50' : ''}`}
                         >
                             <Cell>
-                                <b className="text-[14px] text-[#17352a]">{item.code}</b>
-                                <div className="text-[13px] text-[#4a5750]">{item.name}</div>
-                                <span className="admin-badge admin-badge--gray mt-1 inline-block">{item.category.name}</span>
+                                <b className="text-[14px] text-[#17352a]">
+                                    {item.code}
+                                </b>
+                                <div className="text-[13px] text-[#4a5750]">
+                                    {item.name}
+                                </div>
+                                <span className="admin-badge admin-badge--gray mt-1 inline-block">
+                                    {item.category.name}
+                                </span>
                             </Cell>
                             <Cell>
-                                <span className="text-[13.5px] font-medium text-[#17352a]">{item.user.name}</span>
-                                <div className="text-[12px] text-[#79837d] mt-0.5">Centre: {item.cost_center || '—'}</div>
-                            </Cell>
-                            <Cell>
-                                <strong className={`text-[14px] ${low ? 'text-[#c0392b]' : 'text-[#267049]'}`}>
-                                    {Number(item.quantity_on_hand).toFixed(3)} {item.unit}
-                                </strong>
-                                {low && (
-                                    <div className="text-[11.5px] font-semibold text-[#c0392b] mt-0.5 bg-[#fdf2f1] px-1.5 py-0.5 rounded inline-block">
-                                        Stock critique
+                                <span className="text-[13.5px] font-medium text-[#17352a]">
+                                    {item.user.name}
+                                </span>
+                                {showStockValues && (
+                                    <div className="mt-0.5 text-[12px] text-[#79837d]">
+                                        Centre: {item.cost_center || '—'}
                                     </div>
                                 )}
                             </Cell>
                             <Cell>
-                                <div className="text-[13.5px] font-medium text-[#17352a]">{Number(item.unit_price).toFixed(2)} USD</div>
-                                <div className="text-[12px] text-[#79837d] mt-0.5">
-                                    {(
-                                        Number(item.quantity_on_hand) *
-                                        Number(item.unit_price)
-                                    ).toFixed(2)}{' '}
-                                    USD total
-                                </div>
+                                <strong
+                                    className={`text-[14px] ${low ? 'text-[#c0392b]' : 'text-[#267049]'}`}
+                                >
+                                    {Number(item.quantity_on_hand).toFixed(3)}{' '}
+                                    {item.unit}
+                                </strong>
+                                {low && (
+                                    <div className="mt-0.5 inline-block rounded bg-[#fdf2f1] px-1.5 py-0.5 text-[11.5px] font-semibold text-[#c0392b]">
+                                        Stock critique
+                                    </div>
+                                )}
                             </Cell>
+                            {showStockValues && (
+                                <Cell>
+                                    <div className="text-[13.5px] font-medium text-[#17352a]">
+                                        {Number(item.unit_price).toFixed(2)} USD
+                                    </div>
+                                    <div className="mt-0.5 text-[12px] text-[#79837d]">
+                                        {(
+                                            Number(item.quantity_on_hand) *
+                                            Number(item.unit_price)
+                                        ).toFixed(2)}{' '}
+                                        USD total
+                                    </div>
+                                </Cell>
+                            )}
                             <Cell>
-                                <span className="text-[13px] text-[#4a5750]">{item.minimum_quantity ?? '—'}</span>
+                                <span className="text-[13px] text-[#4a5750]">
+                                    {item.minimum_quantity ?? '—'}
+                                </span>
                             </Cell>
                             <Actions
                                 active={item.active}
@@ -860,7 +1038,7 @@ function ItemTable({
                 })
             ) : (
                 <tr>
-                    <td colSpan={6}>
+                    <td colSpan={showStockValues ? 6 : 5}>
                         <Empty />
                     </td>
                 </tr>
@@ -897,23 +1075,32 @@ function ProductTable({
                     return (
                         <tr
                             key={stock.id}
-                            className={`border-b border-[#e5e1d8] last:border-0 hover:bg-[#f9f8f5] transition-colors ${!stock.active ? 'opacity-50 bg-[#faf9f5]' : ''}`}
+                            className={`border-b border-[#e5e1d8] transition-colors last:border-0 hover:bg-[#f9f8f5] ${!stock.active ? 'bg-[#faf9f5] opacity-50' : ''}`}
                         >
                             <Cell>
-                                <b className="text-[14px] text-[#17352a]">{stock.product_name}</b>
+                                <b className="text-[14px] text-[#17352a]">
+                                    {stock.product_name}
+                                </b>
                             </Cell>
                             <Cell>
-                                <span className="text-[13.5px] font-medium text-[#17352a]">{stock.user.name}</span>
+                                <span className="text-[13.5px] font-medium text-[#17352a]">
+                                    {stock.user.name}
+                                </span>
                             </Cell>
                             <Cell>
-                                <strong className={`text-[14px] ${low ? 'text-[#c0392b]' : 'text-[#267049]'}`}>
-                                    {Number(stock.quantity_on_hand).toFixed(3)} {stock.unit || 'kg/L'}
+                                <strong
+                                    className={`text-[14px] ${low ? 'text-[#c0392b]' : 'text-[#267049]'}`}
+                                >
+                                    {Number(stock.quantity_on_hand).toFixed(3)}{' '}
+                                    {stock.unit || 'kg/L'}
                                 </strong>
                             </Cell>
                             <Cell>
-                                <span className="text-[13px] text-[#4a5750]">{stock.minimum_quantity ?? '—'}</span>
+                                <span className="text-[13px] text-[#4a5750]">
+                                    {stock.minimum_quantity ?? '—'}
+                                </span>
                                 {low && (
-                                    <div className="text-[11.5px] font-semibold text-[#c0392b] mt-0.5 bg-[#fdf2f1] px-1.5 py-0.5 rounded inline-block">
+                                    <div className="mt-0.5 inline-block rounded bg-[#fdf2f1] px-1.5 py-0.5 text-[11.5px] font-semibold text-[#c0392b]">
                                         Stock critique
                                     </div>
                                 )}
@@ -961,33 +1148,51 @@ function AssignmentTable({
                         a.expires_on < new Date().toISOString().slice(0, 10);
 
                     return (
-                        <tr key={a.id} className="border-b border-[#e5e1d8] last:border-0 hover:bg-[#f9f8f5] transition-colors">
+                        <tr
+                            key={a.id}
+                            className="border-b border-[#e5e1d8] transition-colors last:border-0 hover:bg-[#f9f8f5]"
+                        >
                             <Cell>
-                                <b className="text-[14px] text-[#17352a]">{a.assignee_name}</b>
+                                <b className="text-[14px] text-[#17352a]">
+                                    {a.assignee_name}
+                                </b>
                                 <div className="mt-1">
-                                    {a.assignee?.member_account
-                                        ? <span className="admin-badge admin-badge--green">Compte : {a.assignee.member_account.name}</span>
-                                        : <span className="admin-badge admin-badge--gray">Sans compte lié</span>}
+                                    {a.assignee?.member_account ? (
+                                        <span className="admin-badge admin-badge--green">
+                                            Compte :{' '}
+                                            {a.assignee.member_account.name}
+                                        </span>
+                                    ) : (
+                                        <span className="admin-badge admin-badge--gray">
+                                            Sans compte lié
+                                        </span>
+                                    )}
                                 </div>
                             </Cell>
                             <Cell>
-                                <b className="text-[14px] text-[#17352a]">{a.material_name}</b>
-                                <div className="text-[12.5px] text-[#637069] mt-0.5">
+                                <b className="text-[14px] text-[#17352a]">
+                                    {a.material_name}
+                                </b>
+                                <div className="mt-0.5 text-[12.5px] text-[#637069]">
                                     {a.size
                                         ? `Taille ${a.size}`
                                         : 'Taille non précisée'}
                                 </div>
                             </Cell>
                             <Cell>
-                                <span className="text-[13.5px] text-[#17352a]">{a.assigned_on.slice(0, 10)}</span>
-                                <div className="text-[12px] text-[#79837d] mt-0.5">
+                                <span className="text-[13.5px] text-[#17352a]">
+                                    {a.assigned_on.slice(0, 10)}
+                                </span>
+                                <div className="mt-0.5 text-[12px] text-[#79837d]">
                                     {a.expires_on
                                         ? `Expire : ${a.expires_on.slice(0, 10)}`
                                         : 'Sans expiration'}
                                 </div>
                             </Cell>
                             <Cell>
-                                <span className="text-[13px] text-[#4a5750]">{a.issued_by_name || a.user.name}</span>
+                                <span className="text-[13px] text-[#4a5750]">
+                                    {a.issued_by_name || a.user.name}
+                                </span>
                             </Cell>
                             <Cell>
                                 <span
@@ -999,13 +1204,17 @@ function AssignmentTable({
                                           ? 'EXPIRÉE'
                                           : 'ACTIVE'}
                                 </span>
-                                {a.end_reason && <div className="text-[12px] text-[#79837d] mt-1">{a.end_reason}</div>}
+                                {a.end_reason && (
+                                    <div className="mt-1 text-[12px] text-[#79837d]">
+                                        {a.end_reason}
+                                    </div>
+                                )}
                             </Cell>
                             <td className="px-4 py-3 align-top">
                                 {!a.is_replaced && (
                                     <button
                                         onClick={() => onEnd(a)}
-                                        className="admin-btn-secondary !text-[#c0392b] !border-[#f5c6c2] hover:!bg-[#fdf2f1]"
+                                        className="admin-btn-secondary !border-[#f5c6c2] !text-[#c0392b] hover:!bg-[#fdf2f1]"
                                     >
                                         Retirer
                                     </button>
@@ -1059,24 +1268,38 @@ function HistoryTable({
                 rows.map((m) => (
                     <tr
                         key={`${m.family}-${m.id}`}
-                        className="border-b border-[#e5e1d8] last:border-0 hover:bg-[#f9f8f5] transition-colors"
+                        className="border-b border-[#e5e1d8] transition-colors last:border-0 hover:bg-[#f9f8f5]"
                     >
                         <Cell>
-                            <span className="text-[13.5px] font-medium text-[#17352a]">{new Date(m.occurred_at).toLocaleString('fr-FR', {
-                                day: '2-digit', month: '2-digit', year: 'numeric',
-                                hour: '2-digit', minute:'2-digit'
-                            })}</span>
+                            <span className="text-[13.5px] font-medium text-[#17352a]">
+                                {new Date(m.occurred_at).toLocaleString(
+                                    'fr-FR',
+                                    {
+                                        day: '2-digit',
+                                        month: '2-digit',
+                                        year: 'numeric',
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                    },
+                                )}
+                            </span>
                         </Cell>
                         <Cell>
-                            <span className="text-[14px] text-[#17352a]">{m.family}</span>
-                            <div className="text-[12.5px] text-[#637069] mt-0.5">{m.movement_type}</div>
+                            <span className="text-[14px] text-[#17352a]">
+                                {m.family}
+                            </span>
+                            <div className="mt-0.5 text-[12.5px] text-[#637069]">
+                                {m.movement_type}
+                            </div>
                         </Cell>
                         <Cell>
-                            <b className="text-[14px] text-[#17352a]">{m.label}</b>
+                            <b className="text-[14px] text-[#17352a]">
+                                {m.label}
+                            </b>
                         </Cell>
                         <Cell>
                             <span
-                                className={`inline-flex items-center gap-1 font-bold text-[14px] ${Number(m.quantity_change) > 0 ? 'text-[#267049]' : 'text-[#c0392b]'}`}
+                                className={`inline-flex items-center gap-1 text-[14px] font-bold ${Number(m.quantity_change) > 0 ? 'text-[#267049]' : 'text-[#c0392b]'}`}
                             >
                                 {Number(m.quantity_change) > 0 ? (
                                     <TrendingUp size={16} />
@@ -1089,12 +1312,18 @@ function HistoryTable({
                         </Cell>
                         <Cell>
                             <span className="text-[13.5px] text-[#4a5750]">
-                                {m.family === 'Article' ? 'Somme des mouvements' : `${m.quantity_before} → ${m.quantity_after}`}
+                                {m.family === 'Article'
+                                    ? 'Somme des mouvements'
+                                    : `${m.quantity_before} → ${m.quantity_after}`}
                             </span>
                         </Cell>
                         <Cell>
-                            <span className="text-[13.5px] font-medium text-[#17352a]">{m.actor?.name || 'Système'}</span>
-                            <div className="text-[12.5px] text-[#79837d] mt-0.5">{m.notes || '—'}</div>
+                            <span className="text-[13.5px] font-medium text-[#17352a]">
+                                {m.actor?.name || 'Système'}
+                            </span>
+                            <div className="mt-0.5 text-[12.5px] text-[#79837d]">
+                                {m.notes || '—'}
+                            </div>
                         </Cell>
                     </tr>
                 ))
@@ -1131,11 +1360,7 @@ function Table({
     );
 }
 function Cell({ children }: { children: React.ReactNode }) {
-    return (
-        <td className="px-4 py-3.5 align-top">
-            {children}
-        </td>
-    );
+    return <td className="px-4 py-3.5 align-top">{children}</td>;
 }
 function Actions({
     active,

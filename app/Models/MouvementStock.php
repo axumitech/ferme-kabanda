@@ -3,10 +3,18 @@
 namespace App\Models;
 
 use App\Concerns\EstImmuable;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
+/**
+ * @property int $id
+ * @property string $type
+ * @property string $quantite
+ * @property string|null $user_nom
+ * @property CarbonInterface|null $created_at
+ */
 class MouvementStock extends Model
 {
     use EstImmuable;

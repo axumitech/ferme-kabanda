@@ -3,9 +3,18 @@
 namespace App\Models;
 
 use App\Concerns\EstImmuable;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * @property int $id
+ * @property int $tache_id
+ * @property string $type
+ * @property string $user_nom
+ * @property string $resume
+ * @property CarbonInterface|null $created_at
+ */
 class TacheEvenement extends Model
 {
     use EstImmuable;

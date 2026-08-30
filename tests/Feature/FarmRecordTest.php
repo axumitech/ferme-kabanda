@@ -53,6 +53,27 @@ class FarmRecordTest extends TestCase
             ->assertExactJson([]);
     }
 
+    public function test_a_recognized_legacy_report_is_not_shared_with_another_user(): void
+    {
+        $owner = User::factory()->create();
+        $other = User::factory()->create();
+        $key = 'rap:AGRI:2026-08-25';
+
+        $this->actingAs($owner)->putJson(route('farm-data.store', ['recordKey' => $key]), [
+            'value' => '{"meteo":"Sec","secret":"propre a l auteur"}',
+        ])->assertOk();
+
+        $this->actingAs($other)
+            ->getJson(route('farm-data.show', ['recordKey' => $key]))
+            ->assertOk()
+            ->assertExactJson([]);
+
+        $this->actingAs($other)
+            ->getJson(route('farm-data.index', ['prefix' => 'rap:AGRI:']))
+            ->assertOk()
+            ->assertExactJson(['keys' => []]);
+    }
+
     public function test_record_updates_are_atomic_and_do_not_create_duplicates(): void
     {
         $user = User::factory()->create();

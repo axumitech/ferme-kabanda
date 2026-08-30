@@ -27,6 +27,10 @@ class JournalAudit extends Model
         'apres',
         'ip',
         'agent',
+        'reference_externe',
+        'appareil',
+        'saisi_le',
+        'gps',
     ];
 
     protected function casts(): array
@@ -35,6 +39,7 @@ class JournalAudit extends Model
             'avant' => 'array',
             'apres' => 'array',
             'created_at' => 'datetime',
+            'saisi_le' => 'datetime',
         ];
     }
 
