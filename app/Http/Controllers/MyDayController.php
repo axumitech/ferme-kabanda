@@ -2,20 +2,30 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\SourceTache;
 use App\Enums\StatutTache;
 use App\Models\ClotureJournaliere;
 use App\Models\MotifNonExecution;
+use App\Models\OrdreTravail;
 use App\Models\Tache;
+use App\Models\Unite;
+use App\Services\ApprobationTacheService;
 use App\Services\TacheService;
 use App\Services\VisibiliteService;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class MyDayController extends Controller
 {
+    /** @var list<string> */
+    private const STATUTS_OT_OUVERTS = ['demande', 'approuve', 'planifie', 'en_cours', 'realise', 'verifie'];
+
     public function index(Request $request, VisibiliteService $visibilite): Response
     {
         $user = $request->user();
@@ -66,6 +76,8 @@ class MyDayController extends Controller
         return Inertia::render('my-day', [
             'tasks' => $tasks,
             'motifs' => MotifNonExecution::query()->where('actif', true)->orderBy('ordre')->orderBy('libelle')->get(),
+            'openWorkOrders' => $this->openWorkOrders(),
+            'units' => Unite::query()->where('actif', true)->orderBy('nom')->get(['id', 'code', 'nom']),
             'closures' => ClotureJournaliere::query()
                 ->with(['site:id,code,nom', 'departement:id,code,nom'])
                 ->whereDate('date', today())
@@ -106,17 +118,95 @@ class MyDayController extends Controller
         return back()->with('success', 'Tâche enregistrée.');
     }
 
+    public function propose(
+        Request $request,
+        ApprobationTacheService $approbation,
+        TacheService $taches,
+    ): RedirectResponse {
+        $data = $request->validate([
+            'titre' => ['required', 'string', 'max:180'],
+            'description' => ['nullable', 'string', 'max:2000'],
+            'date_due' => ['required', 'date_format:Y-m-d'],
+            'justification' => ['required', 'string', 'max:2000'],
+            'cout_estime' => ['nullable', 'numeric', 'min:0'],
+        ]);
+
+        DB::transaction(function () use ($request, $data, $approbation, $taches): void {
+            $tache = $approbation->proposer([
+                'source' => SourceTache::Manuelle,
+                'titre' => $data['titre'],
+                'description' => $data['description'] ?? null,
+                'date_due' => $data['date_due'],
+                'responsable_id' => $request->user()?->id,
+                'departement_id' => $request->user()?->departement_id,
+            ], $taches);
+
+            $approbation->soumettre(
+                $tache,
+                $data['justification'],
+                isset($data['cout_estime']) ? (float) $data['cout_estime'] : null,
+            );
+        });
+
+        return back()->with('success', 'Proposition soumise — elle sera exécutable après approbation.');
+    }
+
     public function justify(Request $request, Tache $tache, TacheService $service): RedirectResponse|JsonResponse
     {
         abort_unless($this->canUseTask($request, $tache), 403);
 
+        $motifData = $request->validate([
+            'motif_id' => [
+                'required',
+                'integer',
+                Rule::exists('motifs_non_execution', 'id')->where('actif', true),
+            ],
+        ]);
+        $motif = MotifNonExecution::query()
+            ->whereKey((int) $motifData['motif_id'])
+            ->where('actif', true)
+            ->firstOrFail();
+        $estPanne = mb_strtoupper(trim($motif->code)) === 'PANNE';
+
         $data = $request->validate([
-            'motif_id' => ['required', 'integer', 'exists:motifs_non_execution,id'],
-            'motif_precision' => ['nullable', 'string', 'max:180'],
+            'motif_id' => [
+                'required',
+                'integer',
+                Rule::exists('motifs_non_execution', 'id')->where('actif', true),
+            ],
+            'motif_precision' => ['nullable', 'string', $estPanne ? 'max:150' : 'max:180'],
+            'ordre_travail_id' => [
+                Rule::requiredIf($estPanne),
+                Rule::prohibitedIf(! $estPanne),
+                'nullable',
+                'integer',
+                Rule::exists('ordres_travail', 'id')
+                    ->where(fn ($query) => $query->whereIn('statut', self::STATUTS_OT_OUVERTS)),
+            ],
+        ], [
+            'ordre_travail_id.required' => 'Le motif PANNE exige un ordre de travail ouvert.',
+            'ordre_travail_id.prohibited' => 'Un ordre de travail ne peut être lié qu’au motif PANNE.',
+            'ordre_travail_id.exists' => 'L’ordre de travail sélectionné est introuvable ou n’est plus ouvert.',
         ]);
 
-        $motif = MotifNonExecution::query()->whereKey((int) $data['motif_id'])->firstOrFail();
-        $service->justifier($tache, $motif, $data['motif_precision'] ?? null);
+        $ordre = $estPanne
+            ? OrdreTravail::query()
+                ->whereKey((int) $data['ordre_travail_id'])
+                ->whereIn('statut', self::STATUTS_OT_OUVERTS)
+                ->firstOrFail()
+            : null;
+        $precision = trim(implode(' ', array_filter([
+            $ordre?->reference,
+            $data['motif_precision'] ?? null,
+        ], fn ($value): bool => filled($value))));
+
+        DB::transaction(function () use ($tache, $ordre, $service, $motif, $precision): void {
+            if ($ordre) {
+                $tache->forceFill(['ordre_travail_id' => $ordre->id])->saveQuietly();
+            }
+
+            $service->justifier($tache, $motif, $precision !== '' ? $precision : null);
+        });
 
         if ($request->expectsJson() || $request->header('X-Offline-Replay')) {
             return response()->json(['ok' => true, 'message' => 'Justification enregistrée.']);
@@ -130,5 +220,15 @@ class MyDayController extends Controller
         $user = $request->user();
 
         return $user !== null && ($user->is_admin || $tache->responsable_id === $user->id || $tache->intervenants()->where('user_id', $user->id)->exists() || $tache->responsable_id === null);
+    }
+
+    /** @return Collection<int, OrdreTravail> */
+    private function openWorkOrders(): Collection
+    {
+        return OrdreTravail::query()
+            ->whereIn('statut', self::STATUTS_OT_OUVERTS)
+            ->orderByDesc('demande_le')
+            ->limit(50)
+            ->get(['id', 'reference', 'objet', 'cible_libelle', 'statut']);
     }
 }

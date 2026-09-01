@@ -22,12 +22,30 @@ class Incident extends Model
 
     protected $guarded = [];
 
-    protected $casts = ['survenu_le' => 'datetime', 'signale_le' => 'datetime', 'echeance_classification' => 'datetime', 'echeance_investigation' => 'datetime', 'echeance_siege' => 'datetime', 'cinq_pourquoi' => 'array', 'cout_estime' => 'decimal:2'];
+    protected $casts = ['survenu_le' => 'datetime', 'signale_le' => 'datetime', 'echeance_classification' => 'datetime', 'echeance_investigation' => 'datetime', 'echeance_siege' => 'datetime', 'classifie_le' => 'datetime', 'confirme_le' => 'datetime', 'cloture_le' => 'datetime', 'cinq_pourquoi' => 'array', 'tiers_implique' => 'boolean', 'cout_estime' => 'decimal:2'];
 
     /** @return BelongsTo<CategorieIncident, $this> */
     public function categorie(): BelongsTo
     {
         return $this->belongsTo(CategorieIncident::class);
+    }
+
+    /** @return BelongsTo<CategorieIncident, $this> */
+    public function categorieFinale(): BelongsTo
+    {
+        return $this->belongsTo(CategorieIncident::class, 'categorie_finale_id');
+    }
+
+    /** @return BelongsTo<Site, $this> */
+    public function site(): BelongsTo
+    {
+        return $this->belongsTo(Site::class);
+    }
+
+    /** @return BelongsTo<Departement, $this> */
+    public function departement(): BelongsTo
+    {
+        return $this->belongsTo(Departement::class);
     }
 
     /** @return BelongsTo<User, $this> */
@@ -40,5 +58,11 @@ class Incident extends Model
     public function actions(): HasMany
     {
         return $this->hasMany(IncidentAction::class);
+    }
+
+    /** @return HasMany<OrdreTravail, $this> */
+    public function ordresTravail(): HasMany
+    {
+        return $this->hasMany(OrdreTravail::class);
     }
 }

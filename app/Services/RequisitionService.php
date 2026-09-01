@@ -5,7 +5,9 @@ namespace App\Services;
 use App\Enums\Priorite;
 use App\Enums\SourceTache;
 use App\Enums\StatutTache;
+use App\Models\Article;
 use App\Models\Requisition;
+use App\Models\Unite;
 use App\Support\Numerotation;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -19,16 +21,43 @@ class RequisitionService
     {
         if (blank($data['objet'] ?? null)) {
             throw new RuntimeException('L’objet de la demande est obligatoire.');
-        } $valeur = (float) ($data['montant'] ?? 0);
+        }
+        $valeur = $this->valeur($data);
 
-        return Requisition::query()->create(array_merge($data, ['reference' => Numerotation::suivant('RQ', true), 'valeur' => $valeur, 'niveau_requis' => $this->doa->niveauRequis($valeur, ($data['type'] ?? '') === 'STK' ? 'sortie_stock' : 'depense'), 'demandeur_id' => auth()->id()]));
+        return Requisition::query()->create(array_merge($data, [
+            'reference' => Numerotation::suivant('RQ', true),
+            'valeur' => $valeur,
+            'niveau_requis' => $this->doa->niveauRequis($valeur, ($data['type'] ?? '') === 'STK' ? 'sortie_stock' : 'depense'),
+            'statut' => 'demandee',
+            'demandeur_id' => auth()->id(),
+        ]));
     }
 
-    public function verifier(Requisition $r): Requisition
+    public function verifier(Requisition $r, ?string $note = null): Requisition
     {
         $this->transition($r, 'demandee');
         $this->distinct($r);
         $r->update(['statut' => 'verifiee', 'verifie_par_id' => auth()->id(), 'verifie_le' => now()]);
+        $r->journaliser('valide', null, null, "{$r->reference} vérifiée".($note ? " — {$note}" : ''));
+
+        return $r->fresh();
+    }
+
+    public function refuser(Requisition $r, string $motif): Requisition
+    {
+        if (blank($motif)) {
+            throw new RuntimeException('Le motif de refus est obligatoire.');
+        }
+        if (! in_array($r->statut, ['demandee', 'verifiee'], true)) {
+            throw new RuntimeException('Seule une réquisition en attente peut être refusée.');
+        }
+        $this->distinct($r);
+        $r->update([
+            'statut' => 'refusee',
+            'motif_refus' => $motif,
+            'approuve_par_id' => auth()->id(),
+            'approuve_le' => now(),
+        ]);
 
         return $r->fresh();
     }
@@ -81,5 +110,29 @@ class RequisitionService
         if ($r->demandeur_id === auth()->id()) {
             throw new RuntimeException('AUTO-APPROBATION REFUSÉE.');
         }
+    }
+
+    /** @param array<string, mixed> $data */
+    private function valeur(array $data): float
+    {
+        if (($data['type'] ?? null) !== 'STK') {
+            return (float) ($data['montant'] ?? 0);
+        }
+
+        if (empty($data['article_id']) || empty($data['unite_id'])) {
+            return 0.0;
+        }
+
+        $article = Article::query()->find((int) $data['article_id']);
+        $unite = Unite::query()->find((int) $data['unite_id']);
+        $purchaseUnit = $article?->uniteAchat()->first();
+        $price = $article?->getAttribute('prix_unitaire');
+        if (! $article || ! $unite || ! $purchaseUnit || $price === null || ! $unite->estCompatible($purchaseUnit)) {
+            return 0.0;
+        }
+
+        $pricePerBaseUnit = (float) $price / max(1e-9, (float) $purchaseUnit->getAttribute('vers_base'));
+
+        return round((float) ($data['quantite'] ?? 0) * $pricePerBaseUnit * (float) $unite->getAttribute('vers_base'), 2);
     }
 }

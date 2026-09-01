@@ -284,16 +284,44 @@ class OperationalSocleTest extends TestCase
         $this->assertSame(StatutTache::Faite, $task->fresh()->statut);
     }
 
-    public function test_field_app_remains_available_as_the_legacy_terrain_module(): void
+    public function test_user_can_submit_an_action_proposal_from_my_day(): void
+    {
+        $user = User::factory()->create(['actif' => true]);
+
+        $this->actingAs($user)->post(route('my-day.proposals.store'), [
+            'titre' => 'Réparer la clôture nord',
+            'description' => 'Remplacer les poteaux endommagés.',
+            'date_due' => today()->addDay()->toDateString(),
+            'justification' => 'Éviter la sortie des animaux.',
+            'cout_estime' => 125.50,
+        ])->assertRedirect();
+
+        $task = Tache::query()->where('titre', 'Réparer la clôture nord')->firstOrFail();
+
+        $this->assertSame($user->id, $task->responsable_id);
+        $this->assertSame('soumise', $task->statut_approbation);
+        $this->assertSame('125.50', $task->cout_estime);
+        $this->assertSame('Éviter la sortie des animaux.', $task->justification_demande);
+
+        $this->actingAs($user)
+            ->post(route('my-day.tasks.complete', $task))
+            ->assertServerError();
+        $this->assertSame(StatutTache::AFaire, $task->fresh()->statut);
+    }
+
+    public function test_offline_notebook_remains_available_beside_the_parcel_registry(): void
     {
         $user = User::factory()->create();
 
-        $this->actingAs($user)->get(route('field-app'))
+        $this->actingAs($user)->get(route('terrain.carnet.index'))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
-                ->component('field-app')
-                ->has('references')
-                ->has('mapFeatures'));
+                ->component('terrain/carnet'));
+
+        $this->actingAs($user)->get('/terrain')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('terrain/parcelles/index'));
     }
 
     public function test_employee_dashboard_is_scoped_to_their_own_tasks(): void

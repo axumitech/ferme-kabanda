@@ -1,0 +1,31 @@
+import { Head, Link, useForm } from '@inertiajs/react';
+import type { FormEvent, ReactNode } from 'react';
+
+type Option = { id: number; nom: string };
+type Client = Option & { canal: string; devise_preferee: string; prix_reference?: string | null; unite_reference?: string | null };
+type Data = { date: string; client_id: string; client_libre: string; canal: string; devise: string; site_id: string; mode_paiement: string; echeance: string; transport: string; note: string; _create_another: boolean };
+const input = 'mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15 dark:border-slate-700 dark:bg-slate-900';
+
+export default function VenteForm({ clients, canaux, modes, sites, today, taux }: { clients: Client[]; canaux: Record<string, string>; modes: Record<string, string>; sites: Option[]; today: string; taux: number }) {
+    const form = useForm<Data>({ date: today, client_id: '', client_libre: '', canal: '', devise: 'USD', site_id: '', mode_paiement: '', echeance: '', transport: '', note: '', _create_another: false });
+    const selectedClient = clients.find((item) => String(item.id) === form.data.client_id);
+    const save = (again: boolean) => { form.transform((data) => ({ ...data, _create_another: again })); form.post('/ventes'); };
+    const clientChanged = (value: string) => { form.setData('client_id', value); const client = clients.find((item) => String(item.id) === value); if (client) { form.setData((data) => ({ ...data, client_id: value, canal: client.canal, devise: client.devise_preferee })); } };
+    return <><Head title="Create Vente" /><main className="min-h-screen w-full bg-slate-50 px-4 py-6 text-slate-900 sm:px-6 lg:px-8 dark:bg-slate-950 dark:text-slate-100"><div className="w-full space-y-6">
+        <div className="text-sm text-slate-500"><Link href="/ventes" className="hover:text-emerald-600">Ventes</Link><span className="mx-2">›</span>Create</div><h1 className="text-3xl font-bold tracking-tight">Create Vente</h1>
+        <form onSubmit={(event: FormEvent) => { event.preventDefault(); save(false); }} className="grid gap-x-6 gap-y-5 lg:grid-cols-2">
+            <Field label="Date de la vente" required error={form.errors.date}><input required autoFocus type="date" max={today} value={form.data.date} onChange={(e) => form.setData('date', e.target.value)} className={input} /></Field>
+            <Field label="Client" help={selectedClient?.prix_reference ? `Prix de référence : ${Number(selectedClient.prix_reference).toLocaleString('fr-FR', { minimumFractionDigits: 2 })} ${selectedClient.devise_preferee}/${selectedClient.unite_reference ?? 'unité'}` : undefined} error={form.errors.client_id}><Select value={form.data.client_id} set={clientChanged} options={clients.map((client) => [String(client.id), `${client.nom} — ${canaux[client.canal] ?? client.canal}`])} /></Field>
+            {!form.data.client_id && <Field label="Ou client de passage" error={form.errors.client_libre}><input value={form.data.client_libre} onChange={(e) => form.setData('client_libre', e.target.value)} className={input} /></Field>}
+            <Field label="Canal commercial" help="La marge vit dans le canal : le même produit ne vaut pas le même prix partout." error={form.errors.canal}><Select value={form.data.canal} set={(v) => form.setData('canal', v)} options={Object.entries(canaux)} /></Field>
+            <Field label="Devise de la transaction" required help={`Taux du jour : 1 USD = ${Number(taux).toLocaleString('fr-FR', { minimumFractionDigits: 2 })} CDF`} error={form.errors.devise}><Select required value={form.data.devise} set={(v) => form.setData('devise', v)} options={[["USD", "USD — dollar"], ["CDF", "CDF — franc congolais"]]} /></Field>
+            <Field label="Site" error={form.errors.site_id}><Select value={form.data.site_id} set={(v) => form.setData('site_id', v)} options={sites.map((site) => [String(site.id), site.nom])} /></Field>
+            <Field label="Mode de paiement" error={form.errors.mode_paiement}><Select value={form.data.mode_paiement} set={(v) => form.setData('mode_paiement', v)} options={Object.entries(modes)} /></Field>
+            <Field label="Échéance si crédit" error={form.errors.echeance}><input type="date" value={form.data.echeance} onChange={(e) => form.setData('echeance', e.target.value)} className={input} /></Field>
+            <Field label="Transport / véhicule" error={form.errors.transport}><input value={form.data.transport} onChange={(e) => form.setData('transport', e.target.value)} className={input} /></Field>
+            <Field label="Note" full error={form.errors.note}><textarea rows={3} value={form.data.note} onChange={(e) => form.setData('note', e.target.value)} className={input} /></Field>
+            <div className="flex flex-wrap gap-3 border-t border-slate-200 pt-5 lg:col-span-2 dark:border-slate-800"><button disabled={form.processing} className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white">Create</button><button type="button" disabled={form.processing} onClick={() => save(true)} className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold">Create &amp; create another</button><Link href="/ventes" className="rounded-lg px-4 py-2.5 text-sm font-semibold">Cancel</Link></div>
+        </form></div></main></>;
+}
+function Field({ label, required, help, error, full, children }: { label: string; required?: boolean; help?: string; error?: string; full?: boolean; children: ReactNode }) { return <label className={full ? 'lg:col-span-2' : ''}><span className="text-sm font-medium">{label}{required && <span className="text-red-600">*</span>}</span>{children}{help && <span className="mt-1 block text-xs text-slate-500">{help}</span>}{error && <span className="mt-1 block text-xs text-red-600">{error}</span>}</label>; }
+function Select({ value, set, options, required }: { value: string; set: (v: string) => void; options: string[][]; required?: boolean }) { return <select required={required} value={value} onChange={(e) => set(e.target.value)} className={input}><option value="">Select an option</option>{options.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>; }

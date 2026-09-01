@@ -1,4 +1,4 @@
-import { Head, Link, router, useForm } from '@inertiajs/react';
+import { Head, router, useForm, usePage } from '@inertiajs/react';
 import {
     AlertTriangle,
     Archive,
@@ -132,9 +132,18 @@ const units = [
 
 export default function InventoryAdmin(props: Props) {
     const { confirm, ConfirmDialog } = useConfirmDialog();
+    const page = usePage();
+    const requestedTab = new URLSearchParams(page.url.split('?')[1] ?? '').get(
+        'tab',
+    );
+    const initialTab = ['items', 'products', 'assignments', 'history'].includes(
+        requestedTab ?? '',
+    )
+        ? (requestedTab as 'items' | 'products' | 'assignments' | 'history')
+        : 'items';
     const [tab, setTab] = useState<
         'items' | 'products' | 'assignments' | 'history'
-    >('items');
+    >(initialTab);
     const [query, setQuery] = useState('');
     const [showForm, setShowForm] = useState(false);
     const [movementTarget, setMovementTarget] = useState<MovementTarget | null>(
@@ -239,7 +248,10 @@ export default function InventoryAdmin(props: Props) {
     };
     const submitMovement = (event: React.FormEvent) => {
         event.preventDefault();
-        if (!movementTarget) return;
+
+        if (!movementTarget) {
+            return;
+        }
 
         movementForm.post(
             `/admin/inventory/${movementTarget.kind}/${movementTarget.id}/adjust`,
@@ -254,7 +266,10 @@ export default function InventoryAdmin(props: Props) {
     };
     const submitAssignmentEnd = (event: React.FormEvent) => {
         event.preventDefault();
-        if (!endingAssignment) return;
+
+        if (!endingAssignment) {
+            return;
+        }
 
         assignmentEndForm.post(
             `/admin/inventory/assignments/${endingAssignment.id}/end`,
@@ -361,6 +376,15 @@ export default function InventoryAdmin(props: Props) {
                                 key={key}
                                 onClick={() => {
                                     setTab(key);
+                                    router.get(
+                                        '/admin/inventory',
+                                        { tab: key },
+                                        {
+                                            preserveState: true,
+                                            preserveScroll: true,
+                                            replace: true,
+                                        },
+                                    );
                                     setShowForm(false);
                                     setMovementTarget(null);
                                     setEndingAssignment(null);

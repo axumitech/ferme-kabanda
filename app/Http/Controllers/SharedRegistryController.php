@@ -3,14 +3,18 @@
 namespace App\Http\Controllers;
 
 use App\Models\Article;
+use App\Models\Departement;
 use App\Models\Incident;
+use App\Models\MotifNonExecution;
 use App\Models\MouvementStock;
+use App\Models\OrdreTravail;
 use App\Models\Plan;
 use App\Models\Plantation;
 use App\Models\Recolte;
 use App\Models\ReferenceItem;
 use App\Models\Requisition;
 use App\Models\Tache;
+use App\Models\Unite;
 use App\Services\VisibiliteService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -73,7 +77,7 @@ class SharedRegistryController extends Controller
                     'par' => $recolte->user_nom,
                 ])->values(),
             'tasks' => Tache::query()
-                ->with(['responsable:id,name', 'departement:id,code,nom', 'site:id,code,nom'])
+                ->with(['responsable:id,name', 'departement:id,code,nom', 'site:id,code,nom', 'intervenants:id,tache_id,user_id,role'])
                 ->where('est_modele', false)
                 ->orderByRaw("case when statut = 'a_faire' then 0 else 1 end")
                 ->orderBy('date_due')
@@ -84,12 +88,27 @@ class SharedRegistryController extends Controller
                     'id' => $task->id,
                     'reference' => $task->reference,
                     'titre' => $task->titre,
+                    'description' => $task->description,
+                    'instruction' => $task->instruction,
+                    'lieu' => $task->lieu,
                     'statut' => $task->statut->value,
+                    'priorite' => $task->priorite->value,
+                    'statut_approbation' => $task->statut_approbation,
                     'date_due' => $task->date_due->toDateString(),
                     'responsable' => $task->responsable?->name,
                     'departement' => $task->departement?->code,
                     'site' => $task->site?->code,
+                    'can_act' => $user->is_admin
+                        || $task->responsable_id === $user->id
+                        || $task->responsable_id === null
+                        || $task->intervenants->contains('user_id', $user->id),
                 ])->values(),
+            'taskDepartments' => Departement::query()->where('actif', true)->orderBy('nom')->get(['id', 'code', 'nom']),
+            'motifs' => MotifNonExecution::query()->where('actif', true)->orderBy('ordre')->orderBy('libelle')->get(),
+            'openWorkOrders' => OrdreTravail::query()
+                ->whereIn('statut', ['demande', 'approuve', 'planifie', 'en_cours', 'realise', 'verifie'])
+                ->orderByDesc('demande_le')->limit(50)->get(['id', 'reference', 'objet']),
+            'units' => Unite::query()->where('actif', true)->orderBy('nom')->get(['id', 'code', 'nom']),
             'articles' => Article::query()
                 ->with('uniteUsage:id,code')
                 ->where('actif', true)

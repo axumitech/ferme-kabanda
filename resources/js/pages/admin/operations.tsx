@@ -13,8 +13,8 @@ import {
     ShieldCheck,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { AdminLayout } from './AdminLayout';
 import { useI18n } from '@/lib/i18n';
+import { AdminLayout } from './AdminLayout';
 
 type Option = { value: string; label: string };
 type User = { id: number; name: string; niveau_hierarchie?: number };
@@ -27,6 +27,13 @@ type Motif = {
     recevable: boolean;
     preuve_requise: string;
     article_reglement?: string | null;
+};
+type WorkOrder = {
+    id: number;
+    reference: string;
+    objet: string;
+    cible_libelle?: string | null;
+    statut: string;
 };
 type Task = {
     id: number;
@@ -72,6 +79,7 @@ type Props = {
     sites: Site[];
     departements: Departement[];
     motifs: Motif[];
+    openWorkOrders: WorkOrder[];
     users: User[];
     audit: AuditEntry[];
     stats: {
@@ -101,12 +109,22 @@ const formatDateTime = (value: string): string =>
     }).format(new Date(value));
 
 const badgeClass = (task: Task) => {
-    if (task.statut === 'faite') return 'admin-badge admin-badge--green';
-    if (task.statut === 'non_faite_non_justifiee')
+    if (task.statut === 'faite') {
+        return 'admin-badge admin-badge--green';
+    }
+
+    if (task.statut === 'non_faite_non_justifiee') {
         return 'admin-badge admin-badge--red';
-    if (task.statut === 'non_faite_justifiee')
+    }
+
+    if (task.statut === 'non_faite_justifiee') {
         return 'admin-badge admin-badge--gold';
-    if (task.date_due < today) return 'admin-badge admin-badge--red';
+    }
+
+    if (task.date_due < today) {
+        return 'admin-badge admin-badge--red';
+    }
+
     return 'admin-badge admin-badge--gray';
 };
 
@@ -115,6 +133,7 @@ export default function OperationsAdmin({
     sites,
     departements,
     motifs,
+    openWorkOrders,
     users,
     audit,
     stats,
@@ -162,7 +181,13 @@ export default function OperationsAdmin({
     const justifyForm = useForm({
         motif_id: motifs[0]?.id ? String(motifs[0].id) : '',
         motif_precision: '',
+        ordre_travail_id: '',
     });
+    const selectedMotif = motifs.find(
+        (motif) => String(motif.id) === justifyForm.data.motif_id,
+    );
+    const requiresWorkOrder =
+        selectedMotif?.code.trim().toUpperCase() === 'PANNE';
     const closeForm = useForm({
         site_id: sites[0]?.id ? String(sites[0].id) : '',
         departement_id: departements[0]?.id ? String(departements[0].id) : '',
@@ -210,7 +235,10 @@ export default function OperationsAdmin({
 
     const complete = (event: React.FormEvent) => {
         event.preventDefault();
-        if (!selected) return;
+
+        if (!selected) {
+            return;
+        }
 
         completeForm.post(`/admin/operations/tasks/${selected.id}/complete`, {
             preserveScroll: true,
@@ -221,11 +249,15 @@ export default function OperationsAdmin({
 
     const justify = (event: React.FormEvent) => {
         event.preventDefault();
-        if (!selected) return;
+
+        if (!selected) {
+            return;
+        }
 
         justifyForm.post(`/admin/operations/tasks/${selected.id}/justify`, {
             preserveScroll: true,
-            onSuccess: () => justifyForm.reset('motif_precision'),
+            onSuccess: () =>
+                justifyForm.reset('motif_precision', 'ordre_travail_id'),
         });
     };
 
@@ -235,7 +267,10 @@ export default function OperationsAdmin({
     };
 
     const validateDde = () => {
-        if (!selected) return;
+        if (!selected) {
+            return;
+        }
+
         ddeForm.post(`/admin/operations/tasks/${selected.id}/dde/validate`, {
             preserveScroll: true,
         });
@@ -243,7 +278,11 @@ export default function OperationsAdmin({
 
     const requalifyDde = (event: React.FormEvent) => {
         event.preventDefault();
-        if (!selected) return;
+
+        if (!selected) {
+            return;
+        }
+
         ddeForm.post(`/admin/operations/tasks/${selected.id}/dde/requalify`, {
             preserveScroll: true,
         });
@@ -909,14 +948,37 @@ export default function OperationsAdmin({
                                                                 }
                                                                 onChange={(
                                                                     event,
-                                                                ) =>
-                                                                    justifyForm.setData(
-                                                                        'motif_id',
+                                                                ) => {
+                                                                    const motifId =
                                                                         event
                                                                             .target
-                                                                            .value,
-                                                                    )
-                                                                }
+                                                                            .value;
+                                                                    justifyForm.setData(
+                                                                        'motif_id',
+                                                                        motifId,
+                                                                    );
+
+                                                                    if (
+                                                                        motifs
+                                                                            .find(
+                                                                                (
+                                                                                    motif,
+                                                                                ) =>
+                                                                                    String(
+                                                                                        motif.id,
+                                                                                    ) ===
+                                                                                    motifId,
+                                                                            )
+                                                                            ?.code.trim()
+                                                                            .toUpperCase() !==
+                                                                        'PANNE'
+                                                                    ) {
+                                                                        justifyForm.setData(
+                                                                            'ordre_travail_id',
+                                                                            '',
+                                                                        );
+                                                                    }
+                                                                }}
                                                                 required
                                                             >
                                                                 {motifs.map(
@@ -947,6 +1009,80 @@ export default function OperationsAdmin({
                                                                 disciplinaire.
                                                             </p>
                                                         </div>
+                                                        {requiresWorkOrder && (
+                                                            <div className="admin-field mt-3">
+                                                                <label>
+                                                                    Ordre de
+                                                                    travail
+                                                                    ouvert
+                                                                </label>
+                                                                <select
+                                                                    required
+                                                                    value={
+                                                                        justifyForm
+                                                                            .data
+                                                                            .ordre_travail_id
+                                                                    }
+                                                                    onChange={(
+                                                                        event,
+                                                                    ) =>
+                                                                        justifyForm.setData(
+                                                                            'ordre_travail_id',
+                                                                            event
+                                                                                .target
+                                                                                .value,
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    <option value="">
+                                                                        Sélectionner
+                                                                        un OT
+                                                                    </option>
+                                                                    {openWorkOrders.map(
+                                                                        (
+                                                                            order,
+                                                                        ) => (
+                                                                            <option
+                                                                                key={
+                                                                                    order.id
+                                                                                }
+                                                                                value={
+                                                                                    order.id
+                                                                                }
+                                                                            >
+                                                                                {
+                                                                                    order.reference
+                                                                                }{' '}
+                                                                                —{' '}
+                                                                                {
+                                                                                    order.objet
+                                                                                }
+                                                                                {order.cible_libelle
+                                                                                    ? ` · ${order.cible_libelle}`
+                                                                                    : ''}
+                                                                            </option>
+                                                                        ),
+                                                                    )}
+                                                                </select>
+                                                                <p className="admin-form-hint">
+                                                                    {openWorkOrders.length >
+                                                                    0
+                                                                        ? 'Le motif PANNE doit renvoyer à un OT encore ouvert.'
+                                                                        : 'Aucun OT ouvert. Créez d’abord la demande dans Maintenance.'}
+                                                                </p>
+                                                                {justifyForm
+                                                                    .errors
+                                                                    .ordre_travail_id && (
+                                                                    <p className="mt-1 text-xs font-semibold text-red-600">
+                                                                        {
+                                                                            justifyForm
+                                                                                .errors
+                                                                                .ordre_travail_id
+                                                                        }
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                        )}
                                                         <div className="admin-field mt-3">
                                                             <label>
                                                                 Preuve /

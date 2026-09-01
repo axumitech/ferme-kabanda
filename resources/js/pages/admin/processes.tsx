@@ -1,11 +1,6 @@
-import { Head, useForm } from '@inertiajs/react';
-import {
-    AlertTriangle,
-    ClipboardList,
-    Sprout,
-    ShoppingCart,
-} from 'lucide-react';
+import { Head, useForm, usePage } from '@inertiajs/react';
 import { useState } from 'react';
+import IncidentHsePanel from '@/components/incident-hse-panel';
 import { AdminLayout } from './AdminLayout';
 
 type User = { id: number; name: string };
@@ -27,21 +22,6 @@ type Requisition = {
     statut: string;
     tache_service?: { reference: string; statut: string } | null;
 };
-type Incident = {
-    id: number;
-    reference: string;
-    nature: string;
-    description: string;
-    statut: string;
-    categorie?: { code: string; libelle: string } | null;
-    actions: Array<{
-        id: number;
-        action: string;
-        statut: string;
-        tache?: { reference: string; statut: string } | null;
-    }>;
-};
-
 export default function ProcessesAdmin({
     cultures,
     plantations,
@@ -49,13 +29,15 @@ export default function ProcessesAdmin({
     incidents,
     plans,
     sites,
+    departments,
     users,
+    incidentCategories,
     visibility,
 }: {
     cultures: Culture[];
     plantations: Plantation[];
     requisitions: Requisition[];
-    incidents: Incident[];
+    incidents: React.ComponentProps<typeof IncidentHsePanel>['incidents'];
     plans: Array<{
         id: number;
         code: string;
@@ -64,16 +46,31 @@ export default function ProcessesAdmin({
         lignes_count: number;
     }>;
     sites: Site[];
+    departments: Array<{ id: number; code: string; nom: string }>;
     users: User[];
+    incidentCategories: React.ComponentProps<
+        typeof IncidentHsePanel
+    >['categories'];
     visibility: {
         requisitionAmounts: boolean;
         incidentCosts: boolean;
         incidentsSurete: boolean;
+        canCloseIncidents: boolean;
     };
 }) {
-    const [tab, setTab] = useState<
-        'cultures' | 'requisitions' | 'incidents' | 'plans'
-    >('cultures');
+    const page = usePage();
+    const requestedTab = new URLSearchParams(page.url.split('?')[1] ?? '').get(
+        'tab',
+    );
+    const initialTab = [
+        'cultures',
+        'requisitions',
+        'incidents',
+        'plans',
+    ].includes(requestedTab ?? '')
+        ? (requestedTab as 'cultures' | 'requisitions' | 'incidents' | 'plans')
+        : 'cultures';
+    const tab = initialTab;
     const plant = useForm({
         culture_id: String(cultures[0]?.id ?? ''),
         site_id: String(sites[0]?.id ?? ''),
@@ -100,27 +97,8 @@ export default function ProcessesAdmin({
         site_id: String(sites[0]?.id ?? ''),
         departement_id: '',
     });
-    const incident = useForm({
-        nature: 'securite',
-        survenu_le: new Date().toISOString().slice(0, 16),
-        description: '',
-        site_id: String(sites[0]?.id ?? ''),
-        lieu: '',
-        departement_id: '',
-        cout_estime: '',
-        actions_immediates: '',
-    });
-    const capa = useForm({
-        action: '',
-        responsable_id: String(users[0]?.id ?? ''),
-        echeance: new Date().toISOString().slice(0, 10),
-        type: 'corrective',
-    });
     const [selectedPlantation, setSelectedPlantation] =
         useState<Plantation | null>(plantations[0] ?? null);
-    const [selectedIncident, setSelectedIncident] = useState<Incident | null>(
-        incidents[0] ?? null,
-    );
 
     return (
         <AdminLayout
@@ -129,23 +107,6 @@ export default function ProcessesAdmin({
         >
             <Head title="Processus FKN" />
             <div className="admin-animate-in space-y-6">
-                <div className="admin-tabs">
-                    {[
-                        ['cultures', 'Cultures & récoltes', Sprout],
-                        ['requisitions', 'Réquisitions', ShoppingCart],
-                        ['incidents', 'Incidents & CAPA', AlertTriangle],
-                        ['plans', 'Plans en vigueur', ClipboardList],
-                    ].map(([key, label, Icon]) => (
-                        <button
-                            key={key as string}
-                            type="button"
-                            onClick={() => setTab(key as typeof tab)}
-                            className={`admin-tab ${tab === key ? 'admin-tab--active' : ''}`}
-                        >
-                            <Icon size={15} /> {label as string}
-                        </button>
-                    ))}
-                </div>
                 {tab === 'cultures' && (
                     <div className="grid gap-6 xl:grid-cols-2">
                         <form
@@ -409,156 +370,14 @@ export default function ProcessesAdmin({
                     </div>
                 )}
                 {tab === 'incidents' && (
-                    <div className="grid gap-6 xl:grid-cols-2">
-                        <form
-                            className="admin-form-panel"
-                            onSubmit={(e) => {
-                                e.preventDefault();
-                                incident.post('/admin/processes/incidents');
-                            }}
-                        >
-                            <h2 className="admin-section-title">
-                                Déclarer un incident
-                            </h2>
-                            <div className="admin-form-grid">
-                                <Field label="Nature">
-                                    <select
-                                        value={incident.data.nature}
-                                        onChange={(e) =>
-                                            incident.setData(
-                                                'nature',
-                                                e.target.value,
-                                            )
-                                        }
-                                    >
-                                        <option value="securite">
-                                            Sécurité
-                                        </option>
-                                        {visibility.incidentsSurete && (
-                                            <option value="surete">
-                                                Sûreté
-                                            </option>
-                                        )}
-                                        <option value="environnement">
-                                            Environnement
-                                        </option>
-                                    </select>
-                                </Field>
-                                <Field label="Survenu le">
-                                    <input
-                                        type="datetime-local"
-                                        required
-                                        value={incident.data.survenu_le}
-                                        onChange={(e) =>
-                                            incident.setData(
-                                                'survenu_le',
-                                                e.target.value,
-                                            )
-                                        }
-                                    />
-                                </Field>
-                            </div>
-                            <Field label="Description">
-                                <textarea
-                                    required
-                                    value={incident.data.description}
-                                    onChange={(e) =>
-                                        incident.setData(
-                                            'description',
-                                            e.target.value,
-                                        )
-                                    }
-                                />
-                            </Field>
-                            <button className="admin-btn-submit mt-4">
-                                Déclarer et calculer les échéances
-                            </button>
-                        </form>
-                        <div className="admin-card">
-                            <div className="admin-card-body">
-                                <h2 className="admin-section-title">
-                                    Incidents / CAPA
-                                </h2>
-                                {incidents.map((i) => (
-                                    <button
-                                        key={i.id}
-                                        type="button"
-                                        className="block w-full border-b p-3 text-left"
-                                        onClick={() => setSelectedIncident(i)}
-                                    >
-                                        <b>{i.reference}</b> · {i.nature}
-                                        <span className="admin-cell-sub">
-                                            {i.statut} · {i.description}
-                                        </span>
-                                    </button>
-                                ))}
-                                {selectedIncident && (
-                                    <form
-                                        className="mt-4 rounded border p-3"
-                                        onSubmit={(e) => {
-                                            e.preventDefault();
-                                            capa.post(
-                                                `/admin/processes/incidents/${selectedIncident.id}/actions`,
-                                            );
-                                        }}
-                                    >
-                                        <b>Nouvelle action CAPA</b>
-                                        <Field label="Action">
-                                            <input
-                                                required
-                                                value={capa.data.action}
-                                                onChange={(e) =>
-                                                    capa.setData(
-                                                        'action',
-                                                        e.target.value,
-                                                    )
-                                                }
-                                            />
-                                        </Field>
-                                        <div className="admin-form-grid mt-2">
-                                            <Field label="Responsable">
-                                                <select
-                                                    value={
-                                                        capa.data.responsable_id
-                                                    }
-                                                    onChange={(e) =>
-                                                        capa.setData(
-                                                            'responsable_id',
-                                                            e.target.value,
-                                                        )
-                                                    }
-                                                >
-                                                    {users.map((u) => (
-                                                        <option
-                                                            key={u.id}
-                                                            value={u.id}
-                                                        >
-                                                            {u.name}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </Field>
-                                            <Field label="Échéance">
-                                                <input
-                                                    type="date"
-                                                    value={capa.data.echeance}
-                                                    onChange={(e) =>
-                                                        capa.setData(
-                                                            'echeance',
-                                                            e.target.value,
-                                                        )
-                                                    }
-                                                />
-                                            </Field>
-                                        </div>
-                                        <button className="admin-btn-submit mt-3">
-                                            Créer la tâche CAPA
-                                        </button>
-                                    </form>
-                                )}
-                            </div>
-                        </div>
-                    </div>
+                    <IncidentHsePanel
+                        incidents={incidents}
+                        sites={sites}
+                        departments={departments}
+                        users={users}
+                        categories={incidentCategories}
+                        visibility={visibility}
+                    />
                 )}
                 {tab === 'plans' && (
                     <List
@@ -596,6 +415,7 @@ function Field({
 }
 function Action({ label, path }: { label: string; path: string }) {
     const form = useForm({});
+
     return (
         <button
             type="button"

@@ -22,7 +22,10 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
  * @property int|null $departement_id
  * @property int|null $site_id
  * @property CarbonInterface $date_due
+ * @property Priorite $priorite
  * @property StatutTache $statut
+ * @property string|null $statut_approbation
+ * @property CarbonInterface|null $fait_le
  */
 class Tache extends Model
 {
@@ -36,6 +39,7 @@ class Tache extends Model
         'titre',
         'description',
         'instruction',
+        'section_reference_id',
         'departement_id',
         'site_id',
         'lieu',
@@ -45,6 +49,13 @@ class Tache extends Model
         'heure_due',
         'priorite',
         'statut',
+        'statut_approbation',
+        'soumise_le',
+        'approuve_par_id',
+        'approuve_le',
+        'motif_refus',
+        'justification_demande',
+        'cout_estime',
         'recurrence',
         'modele_id',
         'est_modele',
@@ -69,6 +80,7 @@ class Tache extends Model
         'dde_observation',
         'plantation_id',
         'plan_ligne_id',
+        'ordre_travail_id',
     ];
 
     protected function casts(): array
@@ -78,6 +90,8 @@ class Tache extends Model
             'priorite' => Priorite::class,
             'statut' => StatutTache::class,
             'date_due' => 'date',
+            'soumise_le' => 'datetime',
+            'approuve_le' => 'datetime',
             'fait_le' => 'datetime',
             'justifie_le' => 'datetime',
             'escalade_le' => 'datetime',
@@ -85,6 +99,7 @@ class Tache extends Model
             'est_modele' => 'boolean',
             'motif_valide' => 'boolean',
             'quantite' => 'decimal:4',
+            'cout_estime' => 'decimal:2',
         ];
     }
 
@@ -112,10 +127,22 @@ class Tache extends Model
         return $this->belongsTo(User::class, 'cree_par_id');
     }
 
+    /** @return BelongsTo<User, $this> */
+    public function approbateur(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'approuve_par_id');
+    }
+
     /** @return BelongsTo<MotifNonExecution, $this> */
     public function motif(): BelongsTo
     {
         return $this->belongsTo(MotifNonExecution::class, 'motif_id');
+    }
+
+    /** @return BelongsTo<SectionReference, $this> */
+    public function sectionReference(): BelongsTo
+    {
+        return $this->belongsTo(SectionReference::class);
     }
 
     /** @return MorphTo<Model, $this> */
@@ -152,6 +179,12 @@ class Tache extends Model
     public function planLigne(): BelongsTo
     {
         return $this->belongsTo(PlanLigne::class);
+    }
+
+    /** @return BelongsTo<OrdreTravail, $this> */
+    public function ordreTravail(): BelongsTo
+    {
+        return $this->belongsTo(OrdreTravail::class);
     }
 
     /** @param Builder<Tache> $query */

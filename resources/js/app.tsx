@@ -1,12 +1,12 @@
 import { createInertiaApp } from '@inertiajs/react';
-import { Toaster } from '@/components/ui/sonner';
 import { OfflineStatus } from '@/components/offline-status';
+import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { initializeTheme } from '@/hooks/use-appearance';
-import { registerPwaRuntime } from '@/lib/offline-queue';
 import AppLayout from '@/layouts/app-layout';
 import AuthLayout from '@/layouts/auth-layout';
 import SettingsLayout from '@/layouts/settings/layout';
+import { registerPwaRuntime } from '@/lib/offline-queue';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
@@ -28,9 +28,7 @@ createInertiaApp({
     title: (title) => (title ? `${title} - ${appName}` : appName),
     layout: (name) => {
         switch (true) {
-            case name === 'welcome' ||
-                name === 'dashboard' ||
-                name.startsWith('admin/'):
+            case name === 'welcome':
                 return null;
             case name.startsWith('auth/'):
                 return AuthLayout;

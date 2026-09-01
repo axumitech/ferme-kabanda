@@ -4,13 +4,17 @@ namespace App\Http\Controllers\Terrain;
 
 use App\Enums\StatutTache;
 use App\Http\Controllers\Controller;
+use App\Models\Equipement;
+use App\Models\Infrastructure;
 use App\Models\JournalAudit;
 use App\Models\MotifNonExecution;
+use App\Models\OrdreTravail;
 use App\Models\Plantation;
 use App\Models\Recolte;
 use App\Models\Tache;
 use App\Models\User;
 use App\Services\IncidentService;
+use App\Services\OrdreTravailService;
 use App\Services\PlantationService;
 use App\Services\TacheService;
 use App\Services\VisibiliteService;
@@ -34,6 +38,9 @@ use Throwable;
  */
 class SynchronisationController extends Controller
 {
+    /** @var list<string> */
+    private const STATUTS_OT_OUVERTS = ['demande', 'approuve', 'planifie', 'en_cours', 'realise', 'verifie'];
+
     public function __construct(private readonly VisibiliteService $visibilite) {}
 
     public function __invoke(Request $request): JsonResponse
@@ -51,7 +58,7 @@ class SynchronisationController extends Controller
      * Convertit le payload HTTP validé en formes PHP explicites, afin que la
      * synchronisation ne traite jamais une structure ambigüe reçue du réseau.
      *
-     * @return list<array{uuid: string, type: 'tache_faite'|'tache_non_faite'|'recolte'|'incident', donnees: array<string, mixed>, appareil?: string, saisi_le?: string, gps?: array<string, mixed>}>
+     * @return list<array{uuid: string, type: 'tache_faite'|'tache_non_faite'|'recolte'|'incident'|'ordre_travail', donnees: array<string, mixed>, appareil?: string, saisi_le?: string, gps?: array<string, mixed>}>
      */
     private function enregistrementsValides(Request $request): array
     {
@@ -63,6 +70,7 @@ class SynchronisationController extends Controller
                 'tache_non_faite',
                 'recolte',
                 'incident',
+                'ordre_travail',
             ])],
             'enregistrements.*.donnees' => ['required', 'array'],
             'enregistrements.*.appareil' => ['nullable', 'string', 'max:64'],
@@ -88,7 +96,7 @@ class SynchronisationController extends Controller
             }
 
             $type = $enregistrement['type'];
-            if (! in_array($type, ['tache_faite', 'tache_non_faite', 'recolte', 'incident'], true)) {
+            if (! in_array($type, ['tache_faite', 'tache_non_faite', 'recolte', 'incident', 'ordre_travail'], true)) {
                 throw ValidationException::withMessages(['enregistrements' => 'Le type de saisie terrain est inconnu.']);
             }
 
@@ -114,7 +122,7 @@ class SynchronisationController extends Controller
     }
 
     /**
-     * @param  array{uuid: string, type: 'tache_faite'|'tache_non_faite'|'recolte'|'incident', donnees: array<string, mixed>, appareil?: string, saisi_le?: string, gps?: array<string, mixed>}  $record
+     * @param  array{uuid: string, type: 'tache_faite'|'tache_non_faite'|'recolte'|'incident'|'ordre_travail', donnees: array<string, mixed>, appareil?: string, saisi_le?: string, gps?: array<string, mixed>}  $record
      * @return array{uuid: string, accepte: bool, message: string}
      */
     private function traiter(array $record, Request $request): array
@@ -142,6 +150,7 @@ class SynchronisationController extends Controller
                     'tache_non_faite' => $this->tacheNonFaite($data, $user),
                     'recolte' => $this->recolte($data),
                     'incident' => $this->incident($data, $user),
+                    'ordre_travail' => $this->ordreTravail($data),
                 };
 
                 JournalAudit::query()->create([
@@ -218,21 +227,64 @@ class SynchronisationController extends Controller
     /** @param array<string, mixed> $data */
     private function tacheNonFaite(array $data, User $user): void
     {
+        $motifData = Validator::make($data, [
+            'motif_id' => [
+                'required',
+                'integer',
+                Rule::exists('motifs_non_execution', 'id')->where('actif', true),
+            ],
+        ])->validate();
+
+        $motif = MotifNonExecution::query()
+            ->whereKey((int) $motifData['motif_id'])
+            ->where('actif', true)
+            ->firstOrFail();
+        $estPanne = mb_strtoupper(trim($motif->code)) === 'PANNE';
+
         $data = Validator::make($data, [
             'tache_id' => ['required', 'integer', 'exists:taches,id'],
-            'motif_id' => ['required', 'integer', 'exists:motifs_non_execution,id'],
-            'motif_precision' => ['nullable', 'string', 'max:180'],
+            'motif_id' => [
+                'required',
+                'integer',
+                Rule::exists('motifs_non_execution', 'id')->where('actif', true),
+            ],
+            'motif_precision' => ['nullable', 'string', $estPanne ? 'max:150' : 'max:180'],
+            'ordre_travail_id' => [
+                Rule::requiredIf($estPanne),
+                Rule::prohibitedIf(! $estPanne),
+                'nullable',
+                'integer',
+                Rule::exists('ordres_travail', 'id')
+                    ->where(fn ($query) => $query->whereIn('statut', self::STATUTS_OT_OUVERTS)),
+            ],
+        ], [
+            'ordre_travail_id.required' => 'Le motif PANNE exige un ordre de travail ouvert.',
+            'ordre_travail_id.prohibited' => 'Un ordre de travail ne peut être lié qu’au motif PANNE.',
+            'ordre_travail_id.exists' => 'L’ordre de travail sélectionné est introuvable ou n’est plus ouvert.',
         ])->validate();
 
         $task = Tache::query()->findOrFail((int) $data['tache_id']);
-        $motif = MotifNonExecution::query()
-            ->whereKey((int) $data['motif_id'])
-            ->where('actif', true)
-            ->firstOrFail();
         $this->authorizeTaskAction($task, $user);
         $this->ensureOpen($task);
 
-        app(TacheService::class)->justifier($task, $motif, $data['motif_precision'] ?? null);
+        $ordre = $estPanne
+            ? OrdreTravail::query()
+                ->whereKey((int) $data['ordre_travail_id'])
+                ->whereIn('statut', self::STATUTS_OT_OUVERTS)
+                ->firstOrFail()
+            : null;
+        $precision = trim(implode(' ', array_filter([
+            $ordre?->reference,
+            $data['motif_precision'] ?? null,
+        ], fn ($value): bool => filled($value))));
+
+        DB::transaction(function () use ($task, $ordre, $motif, $precision): void {
+            if ($ordre) {
+                $task->forceFill(['ordre_travail_id' => $ordre->id])->saveQuietly();
+            }
+
+            app(TacheService::class)->justifier($task, $motif, $precision !== '' ? $precision : null);
+        });
     }
 
     /** @param array<string, mixed> $data */
@@ -270,6 +322,56 @@ class SynchronisationController extends Controller
         }
 
         app(IncidentService::class)->declarer($data);
+    }
+
+    /** @param array<string, mixed> $data */
+    private function ordreTravail(array $data): void
+    {
+        $data = Validator::make($data, [
+            'cible_type' => ['nullable', 'string', Rule::in(['equipement', 'infrastructure'])],
+            'cible_id' => ['nullable', 'integer', 'min:1'],
+            'objet' => ['required', 'string', 'max:255'],
+            'description' => ['nullable', 'string', 'max:5000'],
+            'site_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('sites', 'id')->where('actif', true),
+            ],
+            'priorite' => ['required', 'string', Rule::in(['basse', 'normale', 'elevee', 'urgente'])],
+            'arret_production' => ['required', 'boolean'],
+            'consequence' => ['nullable', 'string', 'max:2000'],
+            'consignation_requise' => ['required', 'boolean'],
+            'permis_travail' => ['required', 'string', Rule::in(['aucun', 'hauteur', 'chaud', 'electrique', 'espace_confine'])],
+            'epi_requis' => ['nullable', 'string', 'max:255'],
+        ])->validate();
+
+        $targetType = $data['cible_type'] ?? null;
+        $targetId = $data['cible_id'] ?? null;
+
+        if (($targetType === null) !== ($targetId === null)) {
+            throw ValidationException::withMessages([
+                'cible' => 'La nature et la cible de la panne doivent être renseignées ensemble.',
+            ]);
+        }
+
+        $target = match ($targetType) {
+            'equipement' => Equipement::query()->where('actif', true)->find((int) $targetId),
+            'infrastructure' => Infrastructure::query()->where('actif', true)->find((int) $targetId),
+            default => null,
+        };
+
+        if ($targetType !== null && $target === null) {
+            throw ValidationException::withMessages([
+                'cible' => 'L’équipement ou l’infrastructure sélectionné n’est plus actif.',
+            ]);
+        }
+
+        unset($data['cible_type'], $data['cible_id']);
+
+        app(OrdreTravailService::class)->demander(array_merge($data, [
+            'origine' => 'demande',
+            'type_intervention' => 'correctif',
+        ]), $target);
     }
 
     private function authorizeTaskAction(Tache $task, User $user): void

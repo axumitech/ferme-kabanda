@@ -21,6 +21,7 @@ import {
     Sprout,
     Users,
     Wifi,
+    Wrench,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -38,7 +39,7 @@ import type {
     TerrainTask,
 } from '@/lib/terrain-cache';
 
-type Tab = 'taches' | 'ferme' | 'recolte' | 'incident';
+type Tab = 'taches' | 'ferme' | 'recolte' | 'panne' | 'incident';
 type TaskFilter = 'moi' | 'equipe';
 type TaskAction = {
     task: TerrainTask;
@@ -51,6 +52,7 @@ const tabs: Array<{ key: Tab; label: string; Icon: LucideIcon }> = [
     { key: 'taches', label: 'Tâches', Icon: ClipboardList },
     { key: 'ferme', label: 'La ferme', Icon: Users },
     { key: 'recolte', label: 'Récolte', Icon: Leaf },
+    { key: 'panne', label: 'Panne', Icon: Wrench },
     { key: 'incident', label: 'Problème', Icon: ShieldAlert },
 ];
 
@@ -207,6 +209,7 @@ export default function TerrainNotebook({ userId }: { userId: number }) {
     const [justification, setJustification] = useState({
         motif_id: '',
         motif_precision: '',
+        ordre_travail_id: '',
     });
     const [harvest, setHarvest] = useState({
         plantation_id: '',
@@ -225,6 +228,18 @@ export default function TerrainNotebook({ userId }: { userId: number }) {
         description: '',
         actions_immediates: '',
     });
+    const [workOrder, setWorkOrder] = useState({
+        cible: '',
+        site_id: '',
+        objet: '',
+        description: '',
+        priorite: 'normale',
+        arret_production: false,
+        consequence: '',
+        consignation_requise: false,
+        permis_travail: 'aucun',
+        epi_requis: '',
+    });
 
     const refreshReference =
         useCallback(async (): Promise<TerrainSnapshot | null> => {
@@ -232,7 +247,7 @@ export default function TerrainNotebook({ userId }: { userId: number }) {
                 return null;
             }
 
-            const response = await fetch('/terrain/carnet/api/reference', {
+            const response = await fetch('/terrain/api/reference', {
                 headers: { Accept: 'application/json' },
                 credentials: 'same-origin',
             });
@@ -296,19 +311,16 @@ export default function TerrainNotebook({ userId }: { userId: number }) {
         try {
             for (let position = 0; position < items.length; position += 200) {
                 const batch = items.slice(position, position + 200);
-                const response = await fetch(
-                    '/terrain/carnet/api/synchroniser',
-                    {
-                        method: 'POST',
-                        credentials: 'same-origin',
-                        headers: {
-                            Accept: 'application/json',
-                            'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': csrfToken(),
-                        },
-                        body: JSON.stringify({ enregistrements: batch }),
+                const response = await fetch('/terrain/api/synchroniser', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': csrfToken(),
                     },
-                );
+                    body: JSON.stringify({ enregistrements: batch }),
+                });
 
                 if (!response.ok) {
                     throw new Error(
@@ -527,16 +539,35 @@ export default function TerrainNotebook({ userId }: { userId: number }) {
             return;
         }
 
+        const selectedMotif = snapshot?.reference.motifs.find(
+            (motif) => motif.id === Number(justification.motif_id),
+        );
+        const requiresWorkOrder =
+            selectedMotif?.code.trim().toUpperCase() === 'PANNE';
+
+        if (requiresWorkOrder && !justification.ordre_travail_id) {
+            setNotice('Le motif PANNE exige un ordre de travail ouvert.');
+
+            return;
+        }
+
         await queue(
             'tache_non_faite',
             {
                 tache_id: action.task.id,
                 motif_id: Number(justification.motif_id),
                 motif_precision: justification.motif_precision || null,
+                ordre_travail_id: requiresWorkOrder
+                    ? Number(justification.ordre_travail_id)
+                    : null,
             },
             action.task.id,
         );
-        setJustification({ motif_id: '', motif_precision: '' });
+        setJustification({
+            motif_id: '',
+            motif_precision: '',
+            ordre_travail_id: '',
+        });
         setAction(null);
     };
 
@@ -608,6 +639,47 @@ export default function TerrainNotebook({ userId }: { userId: number }) {
         setTab('ferme');
     };
 
+    const submitWorkOrder = async (
+        event: FormEvent<HTMLFormElement>,
+    ): Promise<void> => {
+        event.preventDefault();
+
+        if (!workOrder.objet.trim()) {
+            setNotice('Précisez ce qui doit être réparé.');
+
+            return;
+        }
+
+        const [targetType, targetId] = workOrder.cible.split(':');
+
+        await queue('ordre_travail', {
+            cible_type: targetType || null,
+            cible_id: targetId ? Number(targetId) : null,
+            site_id: workOrder.site_id ? Number(workOrder.site_id) : null,
+            objet: workOrder.objet.trim(),
+            description: workOrder.description.trim() || null,
+            priorite: workOrder.priorite,
+            arret_production: workOrder.arret_production,
+            consequence: workOrder.consequence.trim() || null,
+            consignation_requise: workOrder.consignation_requise,
+            permis_travail: workOrder.permis_travail,
+            epi_requis: workOrder.epi_requis.trim() || null,
+        });
+        setWorkOrder({
+            cible: '',
+            site_id: '',
+            objet: '',
+            description: '',
+            priorite: 'normale',
+            arret_production: false,
+            consequence: '',
+            consignation_requise: false,
+            permis_travail: 'aucun',
+            epi_requis: '',
+        });
+        setTab('ferme');
+    };
+
     const selectPlantation = (plantationId: string): void => {
         const plantation = snapshot?.reference.plantations.find(
             (item) => item.id === Number(plantationId),
@@ -643,8 +715,8 @@ export default function TerrainNotebook({ userId }: { userId: number }) {
 
     return (
         <main className="min-h-screen bg-[#f5f7f4] pb-10 text-slate-800">
-            <header className="bg-[#174a31] px-4 pt-6 pb-5 text-white shadow-lg sm:px-6">
-                <div className="mx-auto max-w-2xl">
+            <header className="bg-[#174a31] px-4 pt-6 pb-5 text-white shadow-lg sm:px-6 lg:px-8">
+                <div className="w-full">
                     <div className="flex items-start justify-between gap-4">
                         <div className="flex min-w-0 items-center gap-3">
                             <div className="grid size-11 shrink-0 place-items-center rounded-2xl bg-white/15">
@@ -689,7 +761,7 @@ export default function TerrainNotebook({ userId }: { userId: number }) {
                 </div>
             </header>
 
-            <div className="mx-auto max-w-2xl px-4 pt-5 sm:px-6">
+            <div className="w-full px-4 pt-5 sm:px-6 lg:px-8">
                 {notice && (
                     <div className="mb-4 flex gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-950">
                         <AlertTriangle className="mt-0.5 size-4 shrink-0" />
@@ -699,7 +771,7 @@ export default function TerrainNotebook({ userId }: { userId: number }) {
 
                 <nav
                     aria-label="Sections du carnet"
-                    className="grid grid-cols-4 gap-2 rounded-2xl bg-white p-2 shadow-sm"
+                    className="grid grid-cols-5 gap-1 rounded-2xl bg-white p-2 shadow-sm sm:gap-2"
                 >
                     {tabs.map(({ key, label, Icon }) => {
                         const active = tab === key;
@@ -995,17 +1067,37 @@ export default function TerrainNotebook({ userId }: { userId: number }) {
                                                                 }
                                                                 onChange={(
                                                                     event,
-                                                                ) =>
+                                                                ) => {
+                                                                    const motifId =
+                                                                        event
+                                                                            .target
+                                                                            .value;
+                                                                    const motif =
+                                                                        snapshot.reference.motifs.find(
+                                                                            (
+                                                                                item,
+                                                                            ) =>
+                                                                                item.id ===
+                                                                                Number(
+                                                                                    motifId,
+                                                                                ),
+                                                                        );
+
                                                                     setJustification(
                                                                         {
                                                                             ...justification,
                                                                             motif_id:
-                                                                                event
-                                                                                    .target
-                                                                                    .value,
+                                                                                motifId,
+                                                                            ordre_travail_id:
+                                                                                motif?.code
+                                                                                    .trim()
+                                                                                    .toUpperCase() ===
+                                                                                'PANNE'
+                                                                                    ? justification.ordre_travail_id
+                                                                                    : '',
                                                                         },
-                                                                    )
-                                                                }
+                                                                    );
+                                                                }}
                                                                 className="min-h-11 rounded-xl border border-slate-300 px-3 text-base"
                                                             >
                                                                 <option value="">
@@ -1030,6 +1122,87 @@ export default function TerrainNotebook({ userId }: { userId: number }) {
                                                                 )}
                                                             </select>
                                                         </label>
+                                                        {snapshot.reference.motifs
+                                                            .find(
+                                                                (motif) =>
+                                                                    motif.id ===
+                                                                    Number(
+                                                                        justification.motif_id,
+                                                                    ),
+                                                            )
+                                                            ?.code.trim()
+                                                            .toUpperCase() ===
+                                                            'PANNE' && (
+                                                            <label className="grid gap-1 text-xs font-bold text-slate-600">
+                                                                Ordre de travail
+                                                                ouvert
+                                                                <select
+                                                                    required
+                                                                    value={
+                                                                        justification.ordre_travail_id
+                                                                    }
+                                                                    onChange={(
+                                                                        event,
+                                                                    ) =>
+                                                                        setJustification(
+                                                                            {
+                                                                                ...justification,
+                                                                                ordre_travail_id:
+                                                                                    event
+                                                                                        .target
+                                                                                        .value,
+                                                                            },
+                                                                        )
+                                                                    }
+                                                                    className="min-h-11 rounded-xl border border-slate-300 px-3 text-base"
+                                                                >
+                                                                    <option value="">
+                                                                        Sélectionner
+                                                                        un OT
+                                                                    </option>
+                                                                    {(
+                                                                        snapshot
+                                                                            .reference
+                                                                            .ordres_travail ??
+                                                                        []
+                                                                    ).map(
+                                                                        (
+                                                                            order,
+                                                                        ) => (
+                                                                            <option
+                                                                                key={
+                                                                                    order.id
+                                                                                }
+                                                                                value={
+                                                                                    order.id
+                                                                                }
+                                                                            >
+                                                                                {
+                                                                                    order.reference
+                                                                                }{' '}
+                                                                                —{' '}
+                                                                                {
+                                                                                    order.objet
+                                                                                }
+                                                                                {order.cible_libelle
+                                                                                    ? ` · ${order.cible_libelle}`
+                                                                                    : ''}
+                                                                            </option>
+                                                                        ),
+                                                                    )}
+                                                                </select>
+                                                                <span className="font-medium text-slate-500">
+                                                                    {(
+                                                                        snapshot
+                                                                            .reference
+                                                                            .ordres_travail ??
+                                                                        []
+                                                                    ).length > 0
+                                                                        ? 'Le motif PANNE doit renvoyer à un OT encore ouvert.'
+                                                                        : 'Aucun OT ouvert. Créez d’abord la demande dans Maintenance.'}
+                                                                </span>
+                                                            </label>
+                                                        )}
                                                         <label className="grid gap-1 text-xs font-bold text-slate-600">
                                                             Précision / preuve
                                                             <textarea
@@ -1284,6 +1457,271 @@ export default function TerrainNotebook({ userId }: { userId: number }) {
                                     >
                                         <CloudUpload className="size-4" />{' '}
                                         Enregistrer la récolte
+                                    </button>
+                                </form>
+                            </section>
+                        )}
+
+                        {tab === 'panne' && (
+                            <section className="mt-5 rounded-2xl border border-amber-200 bg-white p-5 shadow-sm">
+                                <div className="flex items-center gap-3">
+                                    <div className="grid size-10 place-items-center rounded-xl bg-amber-100 text-amber-800">
+                                        <Wrench className="size-5" />
+                                    </div>
+                                    <div>
+                                        <h2 className="font-extrabold text-slate-900">
+                                            Signaler une panne
+                                        </h2>
+                                        <p className="text-sm text-slate-600">
+                                            La demande reste dans le carnet hors
+                                            ligne, puis ouvre un ordre de
+                                            travail.
+                                        </p>
+                                    </div>
+                                </div>
+                                <form
+                                    onSubmit={submitWorkOrder}
+                                    className="mt-5 space-y-4"
+                                >
+                                    <label className="grid gap-1 text-sm font-bold text-slate-700">
+                                        Site concerné
+                                        <select
+                                            value={workOrder.site_id}
+                                            onChange={(event) =>
+                                                setWorkOrder({
+                                                    ...workOrder,
+                                                    site_id: event.target.value,
+                                                })
+                                            }
+                                            className="min-h-12 rounded-xl border border-slate-300 bg-white px-3 text-base"
+                                        >
+                                            <option value="">
+                                                Aucun site précisé
+                                            </option>
+                                            {(
+                                                snapshot.reference.sites ?? []
+                                            ).map((site) => (
+                                                <option
+                                                    key={site.id}
+                                                    value={site.id}
+                                                >
+                                                    {site.libelle}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </label>
+                                    <label className="grid gap-1 text-sm font-bold text-slate-700">
+                                        Équipement ou infrastructure
+                                        <select
+                                            value={workOrder.cible}
+                                            onChange={(event) =>
+                                                setWorkOrder({
+                                                    ...workOrder,
+                                                    cible: event.target.value,
+                                                })
+                                            }
+                                            className="min-h-12 rounded-xl border border-slate-300 bg-white px-3 text-base"
+                                        >
+                                            <option value="">
+                                                Aucune cible précise
+                                            </option>
+                                            {(
+                                                snapshot.reference
+                                                    .equipements ?? []
+                                            ).length > 0 && (
+                                                <optgroup label="Équipements">
+                                                    {(
+                                                        snapshot.reference
+                                                            .equipements ?? []
+                                                    ).map((equipment) => (
+                                                        <option
+                                                            key={`equipement-${equipment.id}`}
+                                                            value={`equipement:${equipment.id}`}
+                                                        >
+                                                            {equipment.libelle}
+                                                        </option>
+                                                    ))}
+                                                </optgroup>
+                                            )}
+                                            {(
+                                                snapshot.reference
+                                                    .infrastructures ?? []
+                                            ).length > 0 && (
+                                                <optgroup label="Infrastructures">
+                                                    {(
+                                                        snapshot.reference
+                                                            .infrastructures ??
+                                                        []
+                                                    ).map((infrastructure) => (
+                                                        <option
+                                                            key={`infrastructure-${infrastructure.id}`}
+                                                            value={`infrastructure:${infrastructure.id}`}
+                                                        >
+                                                            {
+                                                                infrastructure.libelle
+                                                            }
+                                                        </option>
+                                                    ))}
+                                                </optgroup>
+                                            )}
+                                        </select>
+                                    </label>
+                                    <label className="grid gap-1 text-sm font-bold text-slate-700">
+                                        Objet de la réparation
+                                        <input
+                                            required
+                                            value={workOrder.objet}
+                                            onChange={(event) =>
+                                                setWorkOrder({
+                                                    ...workOrder,
+                                                    objet: event.target.value,
+                                                })
+                                            }
+                                            placeholder="Ex. Pompe bloquée"
+                                            className="min-h-12 rounded-xl border border-slate-300 px-3 text-base"
+                                        />
+                                    </label>
+                                    <label className="grid gap-1 text-sm font-bold text-slate-700">
+                                        Description de la panne
+                                        <textarea
+                                            rows={4}
+                                            value={workOrder.description}
+                                            onChange={(event) =>
+                                                setWorkOrder({
+                                                    ...workOrder,
+                                                    description:
+                                                        event.target.value,
+                                                })
+                                            }
+                                            className="rounded-xl border border-slate-300 p-3 text-base"
+                                        />
+                                    </label>
+                                    <label className="grid gap-1 text-sm font-bold text-slate-700">
+                                        Priorité
+                                        <select
+                                            value={workOrder.priorite}
+                                            onChange={(event) =>
+                                                setWorkOrder({
+                                                    ...workOrder,
+                                                    priorite:
+                                                        event.target.value,
+                                                })
+                                            }
+                                            className="min-h-12 rounded-xl border border-slate-300 bg-white px-3 text-base"
+                                        >
+                                            <option value="basse">Basse</option>
+                                            <option value="normale">
+                                                Normale
+                                            </option>
+                                            <option value="elevee">
+                                                Élevée
+                                            </option>
+                                            <option value="urgente">
+                                                Urgente
+                                            </option>
+                                        </select>
+                                    </label>
+                                    <label className="flex min-h-12 items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 text-sm font-bold text-amber-950">
+                                        <input
+                                            type="checkbox"
+                                            checked={workOrder.arret_production}
+                                            onChange={(event) =>
+                                                setWorkOrder({
+                                                    ...workOrder,
+                                                    arret_production:
+                                                        event.target.checked,
+                                                })
+                                            }
+                                            className="size-5"
+                                        />
+                                        La panne arrête la production
+                                    </label>
+                                    <label className="grid gap-1 text-sm font-bold text-slate-700">
+                                        Conséquence pour le travail
+                                        <textarea
+                                            rows={3}
+                                            value={workOrder.consequence}
+                                            onChange={(event) =>
+                                                setWorkOrder({
+                                                    ...workOrder,
+                                                    consequence:
+                                                        event.target.value,
+                                                })
+                                            }
+                                            placeholder="Ce qui ne peut plus être fait"
+                                            className="rounded-xl border border-slate-300 p-3 text-base"
+                                        />
+                                    </label>
+                                    <label className="flex min-h-12 items-center gap-3 rounded-xl border border-slate-200 px-3 text-sm font-bold text-slate-800">
+                                        <input
+                                            type="checkbox"
+                                            checked={
+                                                workOrder.consignation_requise
+                                            }
+                                            onChange={(event) =>
+                                                setWorkOrder({
+                                                    ...workOrder,
+                                                    consignation_requise:
+                                                        event.target.checked,
+                                                })
+                                            }
+                                            className="size-5"
+                                        />
+                                        Consignation obligatoire avant travaux
+                                    </label>
+                                    <div className="grid gap-3 sm:grid-cols-2">
+                                        <label className="grid gap-1 text-sm font-bold text-slate-700">
+                                            Permis de travail
+                                            <select
+                                                value={workOrder.permis_travail}
+                                                onChange={(event) =>
+                                                    setWorkOrder({
+                                                        ...workOrder,
+                                                        permis_travail:
+                                                            event.target.value,
+                                                    })
+                                                }
+                                                className="min-h-12 rounded-xl border border-slate-300 bg-white px-3 text-base"
+                                            >
+                                                <option value="aucun">
+                                                    Aucun
+                                                </option>
+                                                <option value="hauteur">
+                                                    Travail en hauteur
+                                                </option>
+                                                <option value="chaud">
+                                                    Point chaud
+                                                </option>
+                                                <option value="electrique">
+                                                    Électrique
+                                                </option>
+                                                <option value="espace_confine">
+                                                    Espace confiné
+                                                </option>
+                                            </select>
+                                        </label>
+                                        <label className="grid gap-1 text-sm font-bold text-slate-700">
+                                            EPI requis
+                                            <input
+                                                value={workOrder.epi_requis}
+                                                onChange={(event) =>
+                                                    setWorkOrder({
+                                                        ...workOrder,
+                                                        epi_requis:
+                                                            event.target.value,
+                                                    })
+                                                }
+                                                placeholder="Gants, lunettes, harnais…"
+                                                className="min-h-12 rounded-xl border border-slate-300 px-3 text-base"
+                                            />
+                                        </label>
+                                    </div>
+                                    <button
+                                        type="submit"
+                                        className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-amber-700 px-4 text-sm font-bold text-white shadow-sm hover:bg-amber-800"
+                                    >
+                                        <CloudUpload className="size-4" />
+                                        Garder et transmettre la panne
                                     </button>
                                 </form>
                             </section>

@@ -1,6 +1,5 @@
-import { Head, Link, router, useForm } from '@inertiajs/react';
+import { Head, router, useForm } from '@inertiajs/react';
 import {
-    ArrowLeft,
     Check,
     Edit3,
     Map,
@@ -13,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { useConfirmDialog } from '@/hooks/use-confirm-dialog';
+import { AdminLayout } from './AdminLayout';
 
 type Point = [number, number];
 type Feature = {
@@ -152,6 +152,7 @@ export default function MapAdmin({
         if (!selected) {
             return;
         }
+
         if (
             !(await confirm({
                 title: 'Confirmation de suppression',
@@ -191,47 +192,13 @@ export default function MapAdmin({
     };
 
     return (
-        <div className="admin-screen min-h-screen bg-[#f4f1e8] text-[#17352a]">
+        <AdminLayout
+            title="Éditeur du plan"
+            subtitle="Dessinez et organisez les zones de la ferme sur la carte interactive."
+        >
             <ConfirmDialog />
             <Head title="Éditeur du plan de la ferme" />
-            <header className="border-b border-white/10 bg-[#123f29] text-white">
-                <div className="mx-auto flex max-w-[1500px] flex-col gap-4 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
-                    <div className="flex items-center gap-3">
-                        <img
-                            src="/brand-logo.png"
-                            className="size-12 rounded-xl bg-white p-1"
-                            alt="Logo"
-                        />
-                        <div>
-                            <div className="text-xs tracking-[.18em] text-[#e2bd71]">
-                                ADMINISTRATION
-                            </div>
-                            <h1 className="text-lg font-semibold">
-                                Éditeur du plan
-                            </h1>
-                        </div>
-                    </div>
-                    <div className="flex w-full gap-2 sm:w-auto">
-                        <Link
-                            href="/admin"
-                            className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-white/20 px-3 py-2 text-sm font-semibold hover:bg-white/10 sm:flex-none"
-                        >
-                            <ArrowLeft className="size-4" /> Référentiels
-                        </Link>
-                        <Link
-                            href="/dashboard"
-                            className="flex flex-1 items-center justify-center rounded-lg border border-white/20 px-3 py-2 text-sm font-semibold hover:bg-white/10 sm:flex-none"
-                        >
-                            <span className="sm:hidden">Ferme</span>
-                            <span className="hidden sm:inline">
-                                Voir la ferme
-                            </span>
-                        </Link>
-                    </div>
-                </div>
-            </header>
-
-            <main className="mx-auto max-w-[1500px] px-4 py-6 sm:px-8">
+            <div>
                 <div className="mb-5 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
                     <div>
                         <p className="text-sm font-semibold tracking-[.15em] text-[#b16a2f]">
@@ -455,7 +422,8 @@ export default function MapAdmin({
                                 </span>
                             )}
                             <span className="text-xs font-normal text-[#68746d]">
-                                Nom visible dans l’application terrain et le cockpit.
+                                Nom visible dans l’application terrain et le
+                                cockpit.
                             </span>
                         </label>
                         <label className="mt-4 grid gap-1.5 text-sm font-semibold">
@@ -478,7 +446,8 @@ export default function MapAdmin({
                                 ))}
                             </select>
                             <span className="text-xs font-normal text-[#68746d]">
-                                Le type contrôle la couleur et le sens métier de la zone.
+                                Le type contrôle la couleur et le sens métier de
+                                la zone.
                             </span>
                         </label>
                         <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -573,7 +542,7 @@ export default function MapAdmin({
                         )}
                     </form>
                 </div>
-            </main>
-        </div>
+            </div>
+        </AdminLayout>
     );
 }

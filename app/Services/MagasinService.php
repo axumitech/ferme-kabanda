@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\TypeMouvement;
 use App\Models\Article;
+use App\Models\CampagneInventaire;
 use App\Models\MouvementStock;
 use App\Models\Unite;
 use App\Support\Conversion;
@@ -29,7 +30,7 @@ class MagasinService
         return $this->ecrire($article, TypeMouvement::Sortie, $quantite, $unite, $motif, $origine);
     }
 
-    public function inventaire(Article $article, float $compte, Unite $unite, string $observation = ''): MouvementStock
+    public function inventaire(Article $article, float $compte, Unite $unite, string $observation = '', ?CampagneInventaire $campagne = null): MouvementStock
     {
         $baseCompte = Conversion::versBasePourArticle($article, $compte, $unite);
         $ecart = $baseCompte - (float) $article->quantite_base;
@@ -41,6 +42,7 @@ class MagasinService
             abs($unite->depuisBase($ecart)),
             $unite,
             'Inventaire physique - écart constaté'.($observation ? ' : '.$observation : ''),
+            campagneInventaireId: $campagne?->id,
         );
     }
 
@@ -75,12 +77,13 @@ class MagasinService
         ?Model $origine = null,
         ?float $valeur = null,
         ?int $annule = null,
+        ?int $campagneInventaireId = null,
     ): MouvementStock {
         if (! $unite->estCompatible($article->uniteUsage)) {
             throw new RuntimeException("Unité incompatible pour {$article->code}.");
         }
 
-        return DB::transaction(function () use ($article, $type, $quantite, $unite, $motif, $origine, $valeur, $annule): MouvementStock {
+        return DB::transaction(function () use ($article, $type, $quantite, $unite, $motif, $origine, $valeur, $annule, $campagneInventaireId): MouvementStock {
             $base = Conversion::versBasePourArticle($article, $quantite, $unite) * $type->signe();
             $user = auth()->user();
             $userName = $user ? $user->name : 'système';
@@ -100,6 +103,7 @@ class MagasinService
                 'user_id' => $user?->id,
                 'user_nom' => $userName,
                 'annule_mouvement_id' => $annule,
+                'campagne_inventaire_id' => $campagneInventaireId,
             ]);
 
             $article->quantite_base = (float) MouvementStock::query()

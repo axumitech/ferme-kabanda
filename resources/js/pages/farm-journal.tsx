@@ -1,6 +1,5 @@
 import { Head, Link, router } from '@inertiajs/react';
 import { ChevronLeft, ChevronRight, Newspaper } from 'lucide-react';
-import AppLayout from '@/layouts/app-layout';
 
 type Entry = {
     horodatage: string;
@@ -38,10 +37,10 @@ export default function FarmJournal({ jour, entries, dailyCounts }: Props) {
     };
 
     return (
-        <AppLayout>
+        <>
             <Head title="Journal de la ferme" />
-            <main className="min-h-screen bg-slate-50 px-4 py-8 text-slate-800 sm:px-6">
-                <div className="mx-auto max-w-5xl space-y-6">
+            <main className="min-h-screen bg-slate-50 px-4 py-8 text-slate-800 sm:px-6 lg:px-8">
+                <div className="w-full space-y-6">
                     <section className="rounded-2xl bg-[#174a31] p-6 text-white shadow-lg">
                         <div className="flex flex-wrap items-center justify-between gap-4">
                             <div>
@@ -136,6 +135,6 @@ export default function FarmJournal({ jour, entries, dailyCounts }: Props) {
                     </section>
                 </div>
             </main>
-        </AppLayout>
+        </>
     );
 }

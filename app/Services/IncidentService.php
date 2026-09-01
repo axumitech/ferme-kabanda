@@ -35,6 +35,22 @@ class IncidentService
         return $incident->fresh();
     }
 
+    /** @param array<int, string> $pourquoi */
+    public function enregistrerCausesRacines(Incident $incident, array $pourquoi, string $causeRacine, ?string $facteurs = null): Incident
+    {
+        if (count(array_filter($pourquoi)) < 5) {
+            throw new RuntimeException('MÉTHODE INCOMPLÈTE — les cinq « pourquoi » doivent être renseignés.');
+        }
+
+        $incident->update([
+            'cinq_pourquoi' => array_values($pourquoi),
+            'cause_racine' => $causeRacine,
+            'facteurs_contributifs' => $facteurs,
+        ]);
+
+        return $incident->refresh();
+    }
+
     /** @param array<string, mixed> $data */
     public function ajouterAction(Incident $incident, array $data, TacheService $taches): IncidentAction
     {
@@ -49,11 +65,22 @@ class IncidentService
 
     public function cloturer(Incident $incident): Incident
     {
+        $incident->actions()->with('tache')->get()->each(function (IncidentAction $action): void {
+            if ($action->statut === 'ouverte' && $action->tache !== null && $action->tache->statut->value !== 'a_faire') {
+                $action->update(['statut' => 'fermee']);
+            }
+        });
+
         if ($incident->actions()->where('statut', 'ouverte')->exists()) {
             throw new RuntimeException('CLÔTURE REFUSÉE — des actions correctives restent ouvertes.');
-        } if ($incident->categorie?->investigation_obligatoire && blank($incident->cause_racine)) {
+        }
+
+        $categorie = $incident->categorieFinale ?? $incident->categorie;
+        if ($categorie?->investigation_obligatoire && blank($incident->cause_racine)) {
             throw new RuntimeException('CLÔTURE REFUSÉE — la cause racine est obligatoire.');
-        } $incident->update(['statut' => 'cloture', 'cloture_le' => now()]);
+        }
+
+        $incident->update(['statut' => 'cloture', 'cloture_le' => now()]);
 
         return $incident->fresh();
     }

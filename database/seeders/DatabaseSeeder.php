@@ -16,6 +16,12 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             SocleSeeder::class,
+            CultureSeeder::class,
+            MatiereActiveSeeder::class,
+            ParcellaireSeeder::class,
+            MaintenanceSeeder::class,
+            IncidentSeeder::class,
+            PosteControleSeeder::class,
             AdminUserSeeder::class,
             ReferenceDataSeeder::class,
             MapFeatureSeeder::class,

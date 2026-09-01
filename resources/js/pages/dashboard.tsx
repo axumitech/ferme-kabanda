@@ -1,537 +1,755 @@
-import AppLayout from '@/layouts/app-layout';
-import { useI18n } from '@/lib/i18n';
-import { Head, Link, usePage } from '@inertiajs/react';
-import {
-    AlertTriangle,
-    Boxes,
-    CalendarCheck,
-    CheckCircle2,
-    ClipboardCheck,
-    FileText,
-    Lock,
-    Map,
-    Sprout,
-} from 'lucide-react';
+import { Head, Link } from '@inertiajs/react';
+import { ArrowRight, CircleX } from 'lucide-react';
 
 type Task = {
     id: number;
     reference: string;
     titre: string;
     date_due: string;
-    statut: string;
-    priorite: string;
+    escalade_niveau?: number | null;
     responsable?: { id: number; name: string } | null;
-    site?: { id: number; code: string; nom: string } | null;
     departement?: { id: number; code: string; nom: string } | null;
 };
-type Closure = {
+
+type Decision = {
     id: number;
-    date: string;
+    reference: string;
+    title: string;
+    description?: string | null;
+    responsible?: string | null;
+    nature: string;
+    estimatedCost?: number | null;
+};
+
+type Activity = {
+    heure: string;
+    categorie: string;
+    titre: string;
+    par: string;
+    lien: string;
+};
+
+type Performance = {
+    id: number;
+    name: string;
+    department?: string | null;
     dues: number;
-    faites: number;
-    justifiees: number;
-    non_justifiees: number;
-    site?: { code: string } | null;
-    departement?: { code: string } | null;
+    done: number;
+    justified: number;
+    unjustified: number;
+    open: number;
+    rate: number | null;
 };
-type InventoryItem = {
-    id: number;
-    code: string;
-    name: string;
-    unit: string;
-    quantity_on_hand: string;
-    minimum_quantity?: string | null;
+
+type CommercialChannel = {
+    channel: string;
+    amount: number;
+    share: number;
+    count: number;
 };
-type MapFeature = {
-    id: number;
-    name: string;
-    feature_type: string;
-    area_ha: string | null;
-    area_m2: number | null;
-};
+
 type Props = {
     stats: {
         tasksToday: number;
         openTasks: number;
         lateTasks: number;
         doneToday: number;
-        lowInventory: number;
-        lowProducts: number;
-        reportsToday: number;
-        closedToday: number;
+        dueTasks: number;
+        pendingApprovals: number;
+        ddeToValidate: number;
+        requisitionsInCircuit: number;
+        openIncidents: number;
     };
-    tasks: Task[];
-    closures: Closure[];
-    lowInventoryItems: InventoryItem[];
-    mapFeatures: MapFeature[];
-    referencesCount: number;
-    latestActivity: Array<{
-        heure: string;
-        categorie: string;
-        titre: string;
-        par: string;
-        lien: string;
-    }>;
+    overdueTasks: Task[];
+    decisions: Decision[];
+    latestActivity: Activity[];
+    hierarchyLevel: number;
+    commercial: {
+        total: number;
+        count: number;
+        outstanding: number;
+        channels: CommercialChannel[];
+    };
+    equipment: {
+        maintenanceDue: number;
+        unavailable: number;
+        active: number;
+        thirdPartyRevenue: number;
+        operatingCosts: number;
+    };
+    performance: Performance[];
+    maintenance: {
+        openOrders: number;
+        urgentOrders: number;
+        overThirtyDays: number;
+        preventiveShare: number | null;
+        averageRepairHours: number | null;
+        downtimeHours: number;
+        recurringFailures: number;
+    };
 };
 
-const statusClass = (task: Task) => {
-    if (task.statut === 'faite')
-        return 'bg-emerald-50 text-emerald-700 ring-emerald-200';
-    if (task.statut === 'non_faite_non_justifiee')
-        return 'bg-red-50 text-red-700 ring-red-200';
-    if (task.statut === 'non_faite_justifiee')
-        return 'bg-amber-50 text-amber-700 ring-amber-200';
+const money = (value: number): string =>
+    `${new Intl.NumberFormat('fr-FR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    }).format(value)} USD`;
 
-    return 'bg-stone-100 text-stone-700 ring-stone-200';
+const shortDate = (value: string): string => {
+    const date = new Date(`${value.slice(0, 10)}T12:00:00`);
+
+    return Number.isNaN(date.getTime())
+        ? value
+        : new Intl.DateTimeFormat('fr-FR', {
+              day: '2-digit',
+              month: '2-digit',
+          }).format(date);
 };
 
-const formatDate = (value: string): string => {
-    const date = new Date(
-        /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T12:00:00` : value,
+const overdueDays = (value: string): number => {
+    const due = new Date(`${value.slice(0, 10)}T12:00:00`);
+    const today = new Date();
+    today.setHours(12, 0, 0, 0);
+
+    return Math.max(
+        0,
+        Math.floor((today.getTime() - due.getTime()) / 86_400_000),
     );
+};
 
-    if (Number.isNaN(date.getTime())) {
-        return value;
+const escalation = (level?: number | null): string => {
+    if (level === 1) {
+        return 'J+2 Superviseur';
     }
 
-    return new Intl.DateTimeFormat('fr-FR', {
-        day: '2-digit',
-        month: 'long',
-        year: 'numeric',
-    }).format(date);
+    if (level === 2) {
+        return 'J+5 Direction';
+    }
+
+    if (level && level >= 3) {
+        return 'J+10 Disciplinaire';
+    }
+
+    return '—';
 };
 
 export default function Dashboard({
     stats,
-    tasks,
-    closures,
-    lowInventoryItems,
-    mapFeatures,
-    referencesCount,
+    overdueTasks,
+    decisions,
     latestActivity,
+    hierarchyLevel,
+    commercial,
+    equipment,
+    performance,
+    maintenance,
 }: Props) {
-    const { tr, t } = useI18n();
-    const { auth } = usePage().props;
-    const user = auth.user as { is_admin?: boolean } | null;
-    const isAdmin = !!user?.is_admin;
-    const cards = [
-        {
-            label: tr("Aujourd'hui"),
-            value: stats.tasksToday,
-            icon: CalendarCheck,
-            href: '/journee',
-        },
-        {
-            label: tr('Ouvertes'),
-            value: stats.openTasks,
-            icon: ClipboardCheck,
-            href: '/journee',
-        },
-        {
-            label: tr('En retard'),
-            value: stats.lateTasks,
-            icon: AlertTriangle,
-            href: isAdmin ? '/admin/operations' : '/journee',
-            danger: stats.lateTasks > 0,
-        },
-        {
-            label: tr('Faites ce jour'),
-            value: stats.doneToday,
-            icon: CheckCircle2,
-            href: '/journee',
-        },
-        {
-            label: tr('Stock bas'),
-            value: stats.lowInventory + stats.lowProducts,
-            icon: Boxes,
-            href: isAdmin ? '/admin/inventory' : '/terrain',
-            danger: stats.lowInventory + stats.lowProducts > 0,
-        },
-        {
-            label: tr('Clôtures'),
-            value: stats.closedToday,
-            icon: Lock,
-            href: isAdmin ? '/admin/operations' : '/journee',
-        },
-    ];
+    const canManage = hierarchyLevel <= 3;
+    const canDirect = hierarchyLevel <= 2;
+    const overdueScope =
+        hierarchyLevel === 3
+            ? ' — mon département'
+            : hierarchyLevel >= 4
+              ? ' — les miennes'
+              : ' — toute la ferme';
 
     return (
-        <AppLayout>
-            <Head title={tr('Cockpit ferme')} />
-            <main className="dashboard-gradient-bg animate-fade-in-up min-h-screen px-4 py-8 text-[#17352a] sm:px-6 lg:px-8">
-                <div className="mx-auto max-w-7xl space-y-8">
-                    <section className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(300px,.9fr)]">
-                        <div className="dashboard-stat-card p-6 md:p-8">
-                            <div className="flex flex-wrap items-start justify-between gap-6">
-                                <div>
-                                    <p className="text-xs font-bold tracking-[0.16em] text-[#a16f26] uppercase">
-                                        Ferme Kabanda Naweza
-                                    </p>
-                                    <h1 className="mt-2 text-2xl font-bold tracking-tight text-[#17352a] sm:text-3xl">
-                                        {tr('Cockpit opérationnel')}
-                                    </h1>
-                                    <p className="mt-2 max-w-2xl text-sm leading-6 text-[#637069]">
-                                        {isAdmin
-                                            ? tr(
-                                                  'Pilotez les tâches, stocks, rapports et clôtures au même endroit.',
-                                              )
-                                            : tr(
-                                                  'Retrouvez vos tâches du jour, les alertes utiles et les informations terrain sans passer par l’administration.',
-                                              )}
-                                    </p>
-                                </div>
-                                <div className="flex flex-wrap gap-3">
-                                    <Link
-                                        href="/journee"
-                                        className="hover-lift inline-flex h-11 items-center gap-2 rounded-xl bg-[#174a31] px-5 text-sm font-semibold text-white shadow-md"
-                                    >
-                                        <ClipboardCheck size={18} />{' '}
-                                        {t('myDay')}
-                                    </Link>
-                                    <Link
-                                        href="/terrain"
-                                        className="hover-lift inline-flex h-11 items-center gap-2 rounded-xl border border-[#ded8ca] bg-[#fbfaf7] px-5 text-sm font-semibold text-[#425047]"
-                                    >
-                                        <Sprout size={18} /> {t('field')}
-                                    </Link>
-                                    {isAdmin && (
-                                        <Link
-                                            href="/admin/operations"
-                                            className="hover-lift inline-flex h-11 items-center gap-2 rounded-xl border border-[#ded8ca] bg-[#fbfaf7] px-5 text-sm font-semibold text-[#425047]"
-                                        >
-                                            <FileText size={18} /> Admin
-                                        </Link>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                        <div className="bg-glass-dark hover-lift rounded-[20px] p-6 text-white shadow-lg md:p-8">
-                            <p className="text-xs font-bold tracking-[0.16em] text-[#d8a84e] uppercase">
-                                {tr('État du socle')}
-                            </p>
-                            <div className="mt-6 grid grid-cols-3 gap-4 text-center">
-                                <div>
-                                    <div className="text-2xl font-bold">
-                                        {referencesCount}
-                                    </div>
-                                    <div className="text-xs text-[#c9d8d0]">
-                                        {tr('références')}
-                                    </div>
-                                </div>
-                                <div>
-                                    <div className="text-2xl font-bold">
-                                        {stats.reportsToday}
-                                    </div>
-                                    <div className="text-xs text-[#c9d8d0]">
-                                        {tr('rapports')}
-                                    </div>
-                                </div>
-                                <div>
-                                    <div className="text-2xl font-bold">
-                                        {mapFeatures.length}
-                                    </div>
-                                    <div className="text-xs text-[#c9d8d0]">
-                                        {tr('zones')}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
+        <>
+            <Head title="Ferme Kabanda Naweza — Tableau de bord" />
+            <main className="min-h-[calc(100svh-4rem)] bg-[#f9fafb] px-4 py-6 text-[#111827] sm:px-6 lg:px-8 dark:bg-[#111113] dark:text-white">
+                <div className="w-full space-y-6">
+                    <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+                        Ferme Kabanda Naweza — Tableau de bord
+                    </h1>
 
-                    <section className="grid gap-3 md:grid-cols-3">
-                        <ActionCard
-                            title={
-                                isAdmin
-                                    ? '1. Planifier le travail'
-                                    : '1. Traiter mes tâches'
+                    <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+                        <StatCard
+                            label="Tâches dues aujourd’hui"
+                            value={stats.dueTasks}
+                            description={
+                                stats.lateTasks > 0
+                                    ? `${stats.lateTasks} en retard`
+                                    : 'Aucun retard'
                             }
-                            text={
-                                isAdmin
-                                    ? 'Créez ou ouvrez une tâche, choisissez un responsable, puis suivez son statut.'
-                                    : 'Ouvrez une tâche, puis choisissez “faite” ou “justifiée”.'
-                            }
-                            href={isAdmin ? '/admin/operations' : '/journee'}
-                            cta={
-                                isAdmin
-                                    ? 'Ouvrir les opérations'
-                                    : 'Ouvrir ma journée'
-                            }
+                            tone={stats.lateTasks > 0 ? 'danger' : 'success'}
                         />
-                        <ActionCard
-                            title={
-                                isAdmin
-                                    ? '2. Gérer le magasin'
-                                    : '2. Remonter le terrain'
-                            }
-                            text={
-                                isAdmin
-                                    ? 'Ajoutez un article, faites une entrée/sortie, puis consultez l’historique.'
-                                    : 'Consultez les zones et utilisez les écrans terrain prévus pour l’exécution.'
-                            }
-                            href={isAdmin ? '/admin/inventory' : '/terrain'}
-                            cta={
-                                isAdmin ? 'Ouvrir le magasin' : 'Ouvrir terrain'
-                            }
-                        />
-                        <ActionCard
-                            title={
-                                isAdmin
-                                    ? '3. Clôturer la journée'
-                                    : '3. Suivre mon statut'
-                            }
-                            text={
-                                isAdmin
-                                    ? 'La clôture bloque les tâches non traitées et prépare la traçabilité.'
-                                    : 'Les tâches créées par l’admin apparaissent ici quand elles vous sont assignées.'
-                            }
-                            href={isAdmin ? '/admin/operations' : '/journee'}
-                            cta="Voir quoi faire"
-                        />
-                    </section>
-
-                    <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-                        {cards.map(
-                            ({ label, value, icon: Icon, href, danger }) => (
-                                <Link
-                                    key={label}
-                                    href={href}
-                                    className={`dashboard-stat-card p-5 ${danger ? 'danger' : ''}`}
-                                >
-                                    <div className="flex items-start justify-between gap-3">
-                                        <span className="text-xs font-bold tracking-[0.08em] text-[#637069] uppercase">
-                                            {label}
-                                        </span>
-                                        <span
-                                            className={`grid size-9 place-items-center rounded-xl ${danger ? 'bg-red-50 text-red-700' : 'bg-[#edf3ed] text-[#174a31]'}`}
-                                        >
-                                            <Icon size={18} />
-                                        </span>
-                                    </div>
-                                    <div
-                                        className={`mt-5 text-4xl font-extrabold tracking-tight ${danger ? 'text-red-700' : 'text-[#17352a]'}`}
-                                    >
-                                        {value}
-                                    </div>
-                                </Link>
-                            ),
+                        {canManage && (
+                            <>
+                                <StatCard
+                                    label="Approbations en attente"
+                                    value={stats.pendingApprovals}
+                                    description="Actions proposées par les équipes"
+                                    tone="warning"
+                                />
+                                <StatCard
+                                    label="Dossiers DDE à valider"
+                                    value={stats.ddeToValidate}
+                                    description="La machine propose, vous confirmez"
+                                    tone="danger"
+                                />
+                            </>
+                        )}
+                        {canDirect && (
+                            <>
+                                <StatCard
+                                    label="Réquisitions en circuit"
+                                    value={stats.requisitionsInCircuit}
+                                    description="À vérifier ou approuver (DoA)"
+                                    tone="info"
+                                />
+                                <StatCard
+                                    label="Incidents ouverts"
+                                    value={stats.openIncidents}
+                                    description="Échéances 1 h / 4 h / 48 h / 72 h"
+                                    tone="danger"
+                                />
+                            </>
                         )}
                     </section>
 
-                    <section className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(300px,.8fr)]">
-                        <div className="dashboard-stat-card">
-                            <div className="border-b border-[#e7e1d4] px-6 py-5">
-                                <h2 className="text-lg font-bold tracking-tight text-[#17352a]">
-                                    {tr('File opérationnelle')}
-                                </h2>
-                            </div>
-                            <div className="divide-y divide-[#eee8dd]">
-                                {tasks.map((task) => (
-                                    <div
-                                        key={task.id}
-                                        className="grid gap-3 px-5 py-4 md:grid-cols-[1fr_auto]"
-                                    >
-                                        <div>
-                                            <div className="font-semibold">
-                                                {task.titre}
-                                            </div>
-                                            <div className="mt-1 text-sm text-[#637069]">
-                                                {task.reference} ·{' '}
-                                                {task.site?.code ??
-                                                    tr('Site libre')}{' '}
-                                                ·{' '}
-                                                {task.departement?.code ??
-                                                    tr(
-                                                        'Département libre',
-                                                    )}{' '}
-                                                ·{' '}
-                                                {task.responsable?.name ??
-                                                    tr('Non assignée')}
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-2 md:justify-end">
-                                            <span
-                                                className={`rounded-full px-2.5 py-1 text-xs font-bold ring-1 ${statusClass(task)}`}
-                                            >
-                                                {task.statut.replaceAll(
-                                                    '_',
-                                                    ' ',
+                    {canManage && (
+                        <TablePanel title="En attente de votre décision">
+                            <table className="w-full min-w-[760px] text-left text-sm">
+                                <thead>
+                                    <tr>
+                                        <Th>Référence</Th>
+                                        <Th>Objet</Th>
+                                        <Th>Demandeur / responsable</Th>
+                                        <Th>Nature</Th>
+                                        <Th>Coût est.</Th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {decisions.map((decision) => (
+                                        <tr
+                                            key={decision.id}
+                                            className="border-t border-[#e5e7eb] dark:border-white/10"
+                                        >
+                                            <Td>
+                                                <Link
+                                                    href="/admin/operations"
+                                                    className="font-semibold text-[#1a5632] hover:underline dark:text-[#62c487]"
+                                                >
+                                                    {decision.reference}
+                                                </Link>
+                                            </Td>
+                                            <Td>
+                                                <div className="font-medium">
+                                                    {decision.title}
+                                                </div>
+                                                {decision.description && (
+                                                    <div className="mt-1 text-xs text-[#6b7280] dark:text-[#9ca3af]">
+                                                        {decision.description}
+                                                    </div>
                                                 )}
-                                            </span>
-                                            <span className="text-sm font-semibold text-[#637069]">
-                                                {formatDate(task.date_due)}
-                                            </span>
-                                        </div>
-                                    </div>
-                                ))}
-                                {tasks.length === 0 && (
-                                    <div className="px-5 py-10 text-center text-sm text-[#7a857e]">
-                                        {tr('Aucune tâche opérationnelle.')}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
+                                            </Td>
+                                            <Td>
+                                                {decision.responsible ?? '—'}
+                                            </Td>
+                                            <Td>
+                                                <Badge tone="danger">
+                                                    {decision.nature}
+                                                </Badge>
+                                            </Td>
+                                            <Td>
+                                                {decision.estimatedCost == null
+                                                    ? '—'
+                                                    : money(
+                                                          decision.estimatedCost,
+                                                      )}
+                                            </Td>
+                                        </tr>
+                                    ))}
+                                    {decisions.length === 0 && (
+                                        <EmptyRow
+                                            colSpan={5}
+                                            label="Aucune tâche"
+                                        />
+                                    )}
+                                </tbody>
+                            </table>
+                        </TablePanel>
+                    )}
 
-                        <div className="space-y-6">
-                            <div className="dashboard-stat-card">
-                                <div className="flex items-center justify-between border-b border-[#e7e1d4] px-6 py-5">
-                                    <div>
-                                        <h2 className="text-lg font-bold tracking-tight text-[#17352a]">
-                                            Dernières écritures de la ferme
-                                        </h2>
-                                        <p className="mt-1 text-xs text-[#637069]">
-                                            Le registre partagé d’aujourd’hui
-                                        </p>
-                                    </div>
-                                    <Link
-                                        href="/journal-ferme"
-                                        className="text-sm font-bold text-[#174a31]"
+                    <TablePanel title={`Tâches en retard${overdueScope}`}>
+                        <table className="w-full min-w-[820px] text-left text-sm">
+                            <thead>
+                                <tr>
+                                    <Th>Due le</Th>
+                                    <Th>Référence</Th>
+                                    <Th>Tâche</Th>
+                                    <Th>Responsable</Th>
+                                    <Th>Dépt.</Th>
+                                    <Th>Escalade</Th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {overdueTasks.map((task) => (
+                                    <tr
+                                        key={task.id}
+                                        className="border-t border-[#e5e7eb] dark:border-white/10"
                                     >
-                                        Journal →
-                                    </Link>
-                                </div>
-                                <div className="divide-y divide-[#eee8dd]">
-                                    {latestActivity.map((entry, index) => (
-                                        <Link
-                                            key={`${entry.heure}-${index}`}
-                                            href={entry.lien}
-                                            className="flex gap-3 px-5 py-3 hover:bg-[#f6faf6]"
-                                        >
-                                            <span className="w-10 shrink-0 font-mono text-xs text-[#637069]">
-                                                {entry.heure}
-                                            </span>
-                                            <span className="w-20 shrink-0 text-xs font-bold text-[#174a31] uppercase">
-                                                {entry.categorie}
-                                            </span>
-                                            <span className="min-w-0 flex-1 truncate text-sm font-semibold">
-                                                {entry.titre}
-                                            </span>
-                                        </Link>
-                                    ))}
-                                    {latestActivity.length === 0 && (
-                                        <div className="px-5 py-8 text-center text-sm text-[#7a857e]">
-                                            Aucune écriture aujourd’hui.
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                            <div className="dashboard-stat-card">
-                                <div className="border-b border-[#e7e1d4] px-6 py-5">
-                                    <h2 className="text-lg font-bold tracking-tight text-[#17352a]">
-                                        {tr('Alertes magasin')}
-                                    </h2>
-                                </div>
-                                <div className="divide-y divide-[#eee8dd]">
-                                    {lowInventoryItems.map((item) => (
-                                        <div
-                                            key={item.id}
-                                            className="px-5 py-4"
-                                        >
-                                            <div className="font-semibold">
-                                                {item.name}
+                                        <Td>
+                                            <div className="font-semibold text-red-600 dark:text-red-400">
+                                                {shortDate(task.date_due)}
                                             </div>
-                                            <div className="mt-1 text-sm text-[#637069]">
-                                                {item.code} ·{' '}
-                                                {item.quantity_on_hand}{' '}
-                                                {item.unit} · {tr('seuil')}{' '}
-                                                {item.minimum_quantity}
+                                            <div className="mt-1 text-xs text-red-600 dark:text-red-400">
+                                                Retard{' '}
+                                                {overdueDays(task.date_due)} j
                                             </div>
-                                        </div>
-                                    ))}
-                                    {lowInventoryItems.length === 0 && (
-                                        <div className="px-5 py-8 text-center text-sm text-[#7a857e]">
-                                            {tr('Aucune alerte stock.')}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
+                                        </Td>
+                                        <Td>{task.reference}</Td>
+                                        <Td>
+                                            <Link
+                                                href="/admin/operations"
+                                                className="font-medium text-[#1a5632] hover:underline dark:text-[#62c487]"
+                                            >
+                                                {task.titre}
+                                            </Link>
+                                        </Td>
+                                        <Td>{task.responsable?.name ?? '—'}</Td>
+                                        <Td>
+                                            <Badge>
+                                                {task.departement?.code ?? '—'}
+                                            </Badge>
+                                        </Td>
+                                        <Td>
+                                            <Badge
+                                                tone={
+                                                    (task.escalade_niveau ??
+                                                        0) >= 2
+                                                        ? 'danger'
+                                                        : (task.escalade_niveau ??
+                                                                0) === 1
+                                                          ? 'warning'
+                                                          : 'gray'
+                                                }
+                                            >
+                                                {escalation(
+                                                    task.escalade_niveau,
+                                                )}
+                                            </Badge>
+                                        </Td>
+                                    </tr>
+                                ))}
+                                {overdueTasks.length === 0 && (
+                                    <EmptyRow
+                                        colSpan={6}
+                                        label="Aucune tâche"
+                                    />
+                                )}
+                            </tbody>
+                        </table>
+                    </TablePanel>
 
-                            <div className="dashboard-stat-card">
-                                <div className="border-b border-[#e7e1d4] px-6 py-5">
-                                    <h2 className="text-lg font-bold tracking-tight text-[#17352a]">
-                                        {tr('Clôtures récentes')}
-                                    </h2>
-                                </div>
-                                <div className="divide-y divide-[#eee8dd]">
-                                    {closures.map((closure) => (
-                                        <div
-                                            key={closure.id}
-                                            className="px-5 py-4"
-                                        >
-                                            <div className="font-semibold">
-                                                {closure.site?.code} ·{' '}
-                                                {closure.departement?.code} ·{' '}
-                                                {formatDate(closure.date)}
-                                            </div>
-                                            <div className="mt-1 text-sm text-[#637069]">
-                                                {closure.faites}/{closure.dues}{' '}
-                                                {tr('faites')} ·{' '}
-                                                {closure.justifiees}{' '}
-                                                {tr('justifiées')} ·{' '}
-                                                {closure.non_justifiees} RH
-                                            </div>
-                                        </div>
-                                    ))}
-                                    {closures.length === 0 && (
-                                        <div className="px-5 py-8 text-center text-sm text-[#7a857e]">
-                                            {tr('Aucune clôture récente.')}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    </section>
+                    {canManage && (
+                        <TablePanel title="Portées en maternité — effectif théorique">
+                            <table className="w-full min-w-[960px] text-left text-sm">
+                                <thead>
+                                    <tr>
+                                        <Th>Truie</Th>
+                                        <Th>Mise bas</Th>
+                                        <Th>Nés vivants</Th>
+                                        <Th>Morts</Th>
+                                        <Th>Confiés / reçus</Th>
+                                        <Th>Vivants attendus</Th>
+                                        <Th>Mortalité maternité</Th>
+                                        <Th>Sevrage prévu</Th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <EmptyRow
+                                        colSpan={8}
+                                        label="Aucun cycle de reproduction"
+                                    />
+                                </tbody>
+                            </table>
+                        </TablePanel>
+                    )}
 
-                    <section className="dashboard-stat-card">
-                        <div className="flex items-center gap-3 border-b border-[#e7e1d4] px-6 py-5 text-[#17352a]">
-                            <Map size={20} />
-                            <h2 className="text-lg font-bold tracking-tight text-[#17352a]">
-                                {tr('Zones actives')}
-                            </h2>
-                        </div>
-                        <div className="grid gap-3 p-5 md:grid-cols-2 xl:grid-cols-3">
-                            {mapFeatures.map((feature) => (
-                                <div
-                                    key={feature.id}
-                                    className="rounded-lg border border-[#e7e1d4] bg-[#fbfaf7] p-4"
-                                >
-                                    <div className="font-semibold">
-                                        {feature.name}
-                                    </div>
-                                    <div className="mt-1 text-sm text-[#637069]">
-                                        {feature.feature_type} ·{' '}
-                                        {feature.area_ha ??
-                                            `${feature.area_m2 ?? 0} m²`}
-                                    </div>
-                                </div>
+                    {canDirect && (
+                        <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+                            <StatCard
+                                label="Ventes 30 jours"
+                                value={money(commercial.total)}
+                                description={`${commercial.count} bon(s) de livraison`}
+                                tone="success"
+                            />
+                            <StatCard
+                                label="Reste à recouvrer"
+                                value={money(commercial.outstanding)}
+                                description={
+                                    commercial.outstanding > 0
+                                        ? 'Crédits clients ouverts'
+                                        : 'Tout est soldé'
+                                }
+                                tone={
+                                    commercial.outstanding > 0
+                                        ? 'danger'
+                                        : 'success'
+                                }
+                            />
+                            {commercial.channels.map((channel) => (
+                                <StatCard
+                                    key={channel.channel}
+                                    label={channel.channel}
+                                    value={money(channel.amount)}
+                                    description={`${channel.share} % du chiffre · ${channel.count} bon(s)`}
+                                    tone={
+                                        channel.channel
+                                            .toLowerCase()
+                                            .includes('ezhl')
+                                            ? 'success'
+                                            : 'gray'
+                                    }
+                                />
                             ))}
+                        </section>
+                    )}
+
+                    {canManage && (
+                        <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+                            <StatCard
+                                label="Entretiens dus"
+                                value={equipment.maintenanceDue}
+                                description={
+                                    equipment.maintenanceDue > 0
+                                        ? 'Échéances atteintes ou proches'
+                                        : 'Parc à jour'
+                                }
+                                tone={
+                                    equipment.maintenanceDue > 0
+                                        ? 'danger'
+                                        : 'success'
+                                }
+                            />
+                            <StatCard
+                                label="Machines immobilisées"
+                                value={equipment.unavailable}
+                                description={`${equipment.active} équipements actifs`}
+                                tone={
+                                    equipment.unavailable > 0
+                                        ? 'warning'
+                                        : 'success'
+                                }
+                            />
+                            <StatCard
+                                label="Prestations tiers — 30 j"
+                                value={money(equipment.thirdPartyRevenue)}
+                                description="Travaux facturés à l’extérieur"
+                                tone="success"
+                            />
+                            <StatCard
+                                label="Coûts d’exploitation — 30 j"
+                                value={money(equipment.operatingCosts)}
+                                description="Carburant et maintenance"
+                                tone="gray"
+                            />
+                        </section>
+                    )}
+
+                    {canManage && (
+                        <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+                            <StatCard
+                                label="Ordres ouverts"
+                                value={maintenance.openOrders}
+                                description={`${maintenance.urgentOrders} urgent(s) · ${maintenance.overThirtyDays} de plus de 30 jours`}
+                                tone={
+                                    maintenance.urgentOrders > 0 ||
+                                    maintenance.overThirtyDays > 0
+                                        ? 'danger'
+                                        : 'success'
+                                }
+                            />
+                            <StatCard
+                                label="Part du préventif"
+                                value={
+                                    maintenance.preventiveShare === null
+                                        ? '—'
+                                        : `${maintenance.preventiveShare} %`
+                                }
+                                description={
+                                    maintenance.preventiveShare !== null &&
+                                    maintenance.preventiveShare < 50
+                                        ? 'Sous 50 % : on subit les pannes'
+                                        : 'Les pannes sont devancées'
+                                }
+                                tone={
+                                    maintenance.preventiveShare === null
+                                        ? 'gray'
+                                        : maintenance.preventiveShare >= 50
+                                          ? 'success'
+                                          : 'danger'
+                                }
+                            />
+                            <StatCard
+                                label="Temps moyen de réparation"
+                                value={
+                                    maintenance.averageRepairHours === null
+                                        ? '—'
+                                        : `${maintenance.averageRepairHours} h`
+                                }
+                                description={`${maintenance.downtimeHours} h d’immobilisation sur 90 jours`}
+                                tone="info"
+                            />
+                            <StatCard
+                                label="Pannes récurrentes"
+                                value={maintenance.recurringFailures}
+                                description={
+                                    maintenance.recurringFailures > 0
+                                        ? 'Même cible réparée deux fois — cause racine à traiter'
+                                        : 'Aucune répétition constatée'
+                                }
+                                tone={
+                                    maintenance.recurringFailures > 0
+                                        ? 'warning'
+                                        : 'success'
+                                }
+                            />
+                        </section>
+                    )}
+
+                    {canDirect && (
+                        <TablePanel title="Performance par personne — 30 derniers jours">
+                            <table className="w-full min-w-[820px] text-left text-sm">
+                                <thead>
+                                    <tr>
+                                        <Th>Personne</Th>
+                                        <Th>Dues</Th>
+                                        <Th>Faites</Th>
+                                        <Th>Justifiées</Th>
+                                        <Th>Non justifiées</Th>
+                                        <Th>Ouvertes</Th>
+                                        <Th>Taux</Th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {performance.map((person) => (
+                                        <tr
+                                            key={person.id}
+                                            className="border-t border-[#e5e7eb] dark:border-white/10"
+                                        >
+                                            <Td>
+                                                <div className="font-medium">
+                                                    {person.name}
+                                                </div>
+                                                {person.department && (
+                                                    <div className="mt-1 text-xs text-[#6b7280] dark:text-[#9ca3af]">
+                                                        {person.department}
+                                                    </div>
+                                                )}
+                                            </Td>
+                                            <Td>{person.dues}</Td>
+                                            <Td>
+                                                <span className="text-emerald-700 dark:text-emerald-400">
+                                                    {person.done}
+                                                </span>
+                                            </Td>
+                                            <Td>
+                                                <span className="text-amber-700 dark:text-amber-400">
+                                                    {person.justified}
+                                                </span>
+                                            </Td>
+                                            <Td>
+                                                <span
+                                                    className={
+                                                        person.unjustified > 0
+                                                            ? 'font-bold text-red-600 dark:text-red-400'
+                                                            : ''
+                                                    }
+                                                >
+                                                    {person.unjustified}
+                                                </span>
+                                            </Td>
+                                            <Td>{person.open}</Td>
+                                            <Td>
+                                                <Badge
+                                                    tone={
+                                                        person.rate === null
+                                                            ? 'gray'
+                                                            : person.rate >= 90
+                                                              ? 'success'
+                                                              : person.rate >=
+                                                                  60
+                                                                ? 'warning'
+                                                                : 'danger'
+                                                    }
+                                                >
+                                                    {person.rate === null
+                                                        ? '—'
+                                                        : `${person.rate} %`}
+                                                </Badge>
+                                            </Td>
+                                        </tr>
+                                    ))}
+                                    {performance.length === 0 && (
+                                        <EmptyRow
+                                            colSpan={7}
+                                            label="Aucune performance à afficher"
+                                        />
+                                    )}
+                                </tbody>
+                            </table>
+                        </TablePanel>
+                    )}
+
+                    <section className="overflow-hidden rounded-xl border border-[#e5e7eb] bg-white shadow-sm dark:border-white/10 dark:bg-[#1f1f22]">
+                        <div className="border-b border-[#e5e7eb] px-6 py-5 dark:border-white/10">
+                            <h2 className="text-base font-semibold">
+                                Dernières écritures de la ferme
+                            </h2>
+                            <p className="mt-1 text-sm text-[#6b7280] dark:text-[#9ca3af]">
+                                Ce que vos collègues ont consigné aujourd’hui
+                            </p>
+                        </div>
+                        <ul className="divide-y divide-[#e5e7eb] px-6 dark:divide-white/10">
+                            {latestActivity.map((entry, index) => (
+                                <li
+                                    key={`${entry.heure}-${index}`}
+                                    className="flex flex-wrap items-baseline gap-3 py-3 text-sm"
+                                >
+                                    <span className="w-12 shrink-0 text-[#9ca3af]">
+                                        {entry.heure}
+                                    </span>
+                                    <Badge>{entry.categorie}</Badge>
+                                    {entry.lien ? (
+                                        <Link
+                                            href={entry.lien}
+                                            className="min-w-0 flex-1 font-medium text-[#1a5632] hover:underline dark:text-[#62c487]"
+                                        >
+                                            {entry.titre}
+                                        </Link>
+                                    ) : (
+                                        <span className="min-w-0 flex-1">
+                                            {entry.titre}
+                                        </span>
+                                    )}
+                                    <span className="shrink-0 text-xs text-[#9ca3af]">
+                                        {entry.par}
+                                    </span>
+                                </li>
+                            ))}
+                            {latestActivity.length === 0 && (
+                                <li className="py-5 text-sm text-[#6b7280] dark:text-[#9ca3af]">
+                                    Aucune écriture aujourd’hui pour l’instant.
+                                </li>
+                            )}
+                        </ul>
+                        <div className="border-t border-[#e5e7eb] px-6 py-4 dark:border-white/10">
+                            <Link
+                                href="/journal-ferme"
+                                className="inline-flex items-center gap-2 text-sm font-semibold text-[#1a5632] hover:underline dark:text-[#62c487]"
+                            >
+                                Voir le journal complet <ArrowRight size={16} />
+                            </Link>
                         </div>
                     </section>
                 </div>
             </main>
-        </AppLayout>
+        </>
     );
 }
 
-function ActionCard({
-    title,
-    text,
-    href,
-    cta,
+type Tone = 'gray' | 'success' | 'warning' | 'danger' | 'info';
+
+const toneText: Record<Tone, string> = {
+    gray: 'text-[#6b7280] dark:text-[#9ca3af]',
+    success: 'text-emerald-700 dark:text-emerald-400',
+    warning: 'text-amber-700 dark:text-amber-400',
+    danger: 'text-red-600 dark:text-red-400',
+    info: 'text-blue-600 dark:text-blue-400',
+};
+
+function StatCard({
+    label,
+    value,
+    description,
+    tone = 'gray',
 }: {
-    title: string;
-    text: string;
-    href: string;
-    cta: string;
+    label: string;
+    value: string | number;
+    description: string;
+    tone?: Tone;
 }) {
     return (
-        <Link href={href} className="dashboard-stat-card hover-lift p-5">
-            <h2 className="text-sm font-bold text-[#17352a]">{title}</h2>
-            <p className="mt-2 min-h-[2.5rem] text-sm leading-relaxed text-[#637069]">
-                {text}
+        <article className="min-h-40 rounded-xl border border-[#e5e7eb] bg-white p-6 shadow-sm dark:border-white/10 dark:bg-[#1f1f22]">
+            <p className="text-sm text-[#6b7280] dark:text-[#9ca3af]">
+                {label}
             </p>
-            <div className="mt-5 text-sm font-bold text-[#174a31] transition-colors group-hover:text-[#c9963a]">
-                {cta} →
+            <p className="mt-2 text-3xl font-semibold tracking-tight">
+                {value}
+            </p>
+            <p className={`mt-3 text-sm ${toneText[tone]}`}>{description}</p>
+        </article>
+    );
+}
+
+function TablePanel({
+    title,
+    children,
+}: {
+    title: string;
+    children: React.ReactNode;
+}) {
+    return (
+        <section className="overflow-hidden rounded-xl border border-[#e5e7eb] bg-white shadow-sm dark:border-white/10 dark:bg-[#1f1f22]">
+            <div className="border-b border-[#e5e7eb] px-6 py-5 dark:border-white/10">
+                <h2 className="text-base font-semibold">{title}</h2>
             </div>
-        </Link>
+            <div className="overflow-x-auto">{children}</div>
+        </section>
+    );
+}
+
+function Th({ children }: { children: React.ReactNode }) {
+    return (
+        <th className="bg-[#f3f4f6] px-6 py-3 text-xs font-semibold text-[#374151] dark:bg-white/[0.06] dark:text-[#e5e7eb]">
+            {children}
+        </th>
+    );
+}
+
+function Td({ children }: { children: React.ReactNode }) {
+    return <td className="px-6 py-4 align-top">{children}</td>;
+}
+
+function EmptyRow({ colSpan, label }: { colSpan: number; label: string }) {
+    return (
+        <tr>
+            <td colSpan={colSpan} className="h-40 text-center">
+                <div className="inline-flex flex-col items-center gap-3 text-sm text-[#6b7280] dark:text-[#9ca3af]">
+                    <span className="grid size-10 place-items-center rounded-full bg-[#f3f4f6] dark:bg-white/[0.08]">
+                        <CircleX size={20} />
+                    </span>
+                    <span className="font-medium">{label}</span>
+                </div>
+            </td>
+        </tr>
+    );
+}
+
+function Badge({
+    children,
+    tone = 'gray',
+}: {
+    children: React.ReactNode;
+    tone?: Tone;
+}) {
+    const classes: Record<Tone, string> = {
+        gray: 'bg-[#f3f4f6] text-[#4b5563] dark:bg-white/10 dark:text-[#d1d5db]',
+        success:
+            'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
+        warning:
+            'bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
+        danger: 'bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-300',
+        info: 'bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300',
+    };
+
+    return (
+        <span
+            className={`inline-flex rounded-md px-2 py-1 text-xs font-medium ${classes[tone]}`}
+        >
+            {children}
+        </span>
     );
 }

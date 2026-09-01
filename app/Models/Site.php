@@ -25,4 +25,10 @@ class Site extends Model
     {
         return $this->hasMany(User::class);
     }
+
+    /** @return HasMany<Parcelle, $this> */
+    public function parcelles(): HasMany
+    {
+        return $this->hasMany(Parcelle::class);
+    }
 }

@@ -39,6 +39,15 @@ export type TerrainJournalEntry = {
 export type TerrainReference = {
     sites: Array<{ id: number; libelle: string }>;
     plantations: Array<{ id: number; libelle: string; unite: string }>;
+    equipements: Array<{ id: number; libelle: string }>;
+    infrastructures: Array<{ id: number; libelle: string }>;
+    ordres_travail: Array<{
+        id: number;
+        reference: string;
+        objet: string;
+        cible_libelle: string | null;
+        statut: string;
+    }>;
     motifs: Array<{
         id: number;
         code: string;
@@ -59,7 +68,11 @@ export type TerrainSnapshot = {
 };
 
 export type TerrainRecordType =
-    'tache_faite' | 'tache_non_faite' | 'recolte' | 'incident';
+    | 'tache_faite'
+    | 'tache_non_faite'
+    | 'recolte'
+    | 'incident'
+    | 'ordre_travail';
 
 export type TerrainQueueItem = {
     uuid: string;

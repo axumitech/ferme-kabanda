@@ -38,6 +38,7 @@ class MouvementStock extends Model
         'user_id',
         'user_nom',
         'annule_mouvement_id',
+        'campagne_inventaire_id',
         'note',
     ];
 

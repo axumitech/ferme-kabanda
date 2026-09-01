@@ -1,10 +1,8 @@
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import {
-    Boxes,
     Database,
     FileText,
     Leaf,
-    Map,
     Pencil,
     Plus,
     Search,
@@ -41,8 +39,15 @@ type Props = {
 
 export default function ReferencesAdmin({ categories, items, stats }: Props) {
     const { confirm, ConfirmDialog } = useConfirmDialog();
-    const { auth } = usePage().props;
-    const [category, setCategory] = useState(Object.keys(categories)[0]);
+    const page = usePage();
+    const requestedCategory = new URLSearchParams(
+        page.url.split('?')[1] ?? '',
+    ).get('category');
+    const initialCategory =
+        requestedCategory && requestedCategory in categories
+            ? requestedCategory
+            : Object.keys(categories)[0];
+    const [category, setCategory] = useState(initialCategory);
     const [query, setQuery] = useState('');
     const [editing, setEditing] = useState<Item | null>(null);
     const form = useForm({
@@ -105,6 +110,15 @@ export default function ReferencesAdmin({ categories, items, stats }: Props) {
 
     const selectCategory = (next: string) => {
         setCategory(next);
+        router.get(
+            '/admin',
+            { category: next },
+            {
+                preserveState: true,
+                preserveScroll: true,
+                replace: true,
+            },
+        );
         setEditing(null);
         form.setData({
             category: next,
@@ -149,12 +163,14 @@ export default function ReferencesAdmin({ categories, items, stats }: Props) {
     };
 
     const remove = async (item: Item) => {
-        if (await confirm({ 
-            title: 'Confirmation de suppression',
-            description: `Supprimer « ${item.label} » du référentiel ?`,
-            confirmText: 'Supprimer',
-            variant: 'destructive'
-        })) {
+        if (
+            await confirm({
+                title: 'Confirmation de suppression',
+                description: `Supprimer « ${item.label} » du référentiel ?`,
+                confirmText: 'Supprimer',
+                variant: 'destructive',
+            })
+        ) {
             router.delete(`/admin/references/${item.id}`, {
                 preserveScroll: true,
             });
@@ -168,13 +184,15 @@ export default function ReferencesAdmin({ categories, items, stats }: Props) {
         >
             <ConfirmDialog />
             <Head title="Administration des référentiels" />
-            
+
             <div className="admin-animate-in">
                 <div className="admin-stats-grid">
                     {statCards.map(({ icon: Icon, label, value }) => (
                         <div key={label} className="admin-stat-card">
                             <div className="admin-stat-header">
-                                <span className="admin-stat-label">{label}</span>
+                                <span className="admin-stat-label">
+                                    {label}
+                                </span>
                                 <div className="admin-stat-icon">
                                     <Icon size={16} />
                                 </div>
@@ -194,11 +212,15 @@ export default function ReferencesAdmin({ categories, items, stats }: Props) {
                                 <span className="flex items-center gap-2">
                                     <UserPlus size={16} /> Comptes membres
                                 </span>
-                                <span className="admin-sidebar-count">{stats.users}</span>
+                                <span className="admin-sidebar-count">
+                                    {stats.users}
+                                </span>
                             </Link>
-                            
-                            <div className="admin-sidebar-section-label">CATÉGORIES</div>
-                            
+
+                            <div className="admin-sidebar-section-label">
+                                CATÉGORIES
+                            </div>
+
                             {Object.entries(categories).map(([key, label]) => (
                                 <button
                                     key={key}
@@ -207,7 +229,11 @@ export default function ReferencesAdmin({ categories, items, stats }: Props) {
                                 >
                                     <span>{label}</span>
                                     <span className="admin-sidebar-count">
-                                        {items.filter((i) => i.category === key).length}
+                                        {
+                                            items.filter(
+                                                (i) => i.category === key,
+                                            ).length
+                                        }
                                     </span>
                                 </button>
                             ))}
@@ -218,47 +244,69 @@ export default function ReferencesAdmin({ categories, items, stats }: Props) {
                         <form onSubmit={submit} className="admin-form-panel">
                             <div className="mb-5 flex items-center gap-3">
                                 <div className="grid size-10 place-items-center rounded-xl bg-[#edf3ed] text-[#174a31]">
-                                    {editing ? <Pencil size={20} /> : <Plus size={20} />}
+                                    {editing ? (
+                                        <Pencil size={20} />
+                                    ) : (
+                                        <Plus size={20} />
+                                    )}
                                 </div>
                                 <div>
-                                    <h3 className="font-semibold text-[15px] text-[#17352a]">
-                                        {editing ? 'Modifier cet élément' : 'Ajouter un élément'}
+                                    <h3 className="text-[15px] font-semibold text-[#17352a]">
+                                        {editing
+                                            ? 'Modifier cet élément'
+                                            : 'Ajouter un élément'}
                                     </h3>
                                     <p className="text-[13px] text-[#637069]">
                                         {categories[category]}
                                     </p>
                                 </div>
                             </div>
-                            
+
                             <div className="admin-field mb-5">
                                 <label>Que voulez-vous ajouter ?</label>
                                 <select
                                     value={category}
-                                    onChange={(event) => selectCategory(event.target.value)}
+                                    onChange={(event) =>
+                                        selectCategory(event.target.value)
+                                    }
                                 >
-                                    {Object.entries(categories).map(([key, label]) => (
-                                        <option key={key} value={key}>{label}</option>
-                                    ))}
+                                    {Object.entries(categories).map(
+                                        ([key, label]) => (
+                                            <option key={key} value={key}>
+                                                {label}
+                                            </option>
+                                        ),
+                                    )}
                                 </select>
                                 <p className="admin-form-hint">
-                                    Ces éléments alimentent les listes visibles dans le terrain, les tâches et les rapports.
+                                    Ces éléments alimentent les listes visibles
+                                    dans le terrain, les tâches et les rapports.
                                 </p>
                             </div>
-                            
+
                             <div className="admin-form-grid md:grid-cols-[1fr_120px]">
                                 <div className="admin-field">
                                     <label>{currentHint.label}</label>
                                     <input
                                         value={form.data.label}
-                                        onChange={(e) => form.setData('label', e.target.value)}
+                                        onChange={(e) =>
+                                            form.setData(
+                                                'label',
+                                                e.target.value,
+                                            )
+                                        }
                                         required
                                         placeholder={currentHint.placeholder}
                                     />
                                     {form.errors.label && (
-                                        <span className="admin-form-error">{form.errors.label}</span>
+                                        <span className="admin-form-error">
+                                            {form.errors.label}
+                                        </span>
                                     )}
                                     <p className="admin-form-hint">
-                                        Exemple attendu : nom d’agent, parcelle, culture, produit, tâche ou type d’EPI selon la catégorie.
+                                        Exemple attendu : nom d’agent, parcelle,
+                                        culture, produit, tâche ou type d’EPI
+                                        selon la catégorie.
                                     </p>
                                 </div>
                                 <div className="admin-field">
@@ -267,28 +315,51 @@ export default function ReferencesAdmin({ categories, items, stats }: Props) {
                                         type="number"
                                         min="0"
                                         value={form.data.sort_order}
-                                        onChange={(e) => form.setData('sort_order', Number(e.target.value))}
+                                        onChange={(e) =>
+                                            form.setData(
+                                                'sort_order',
+                                                Number(e.target.value),
+                                            )
+                                        }
                                     />
-                                    <p className="admin-form-hint">Plus le nombre est petit, plus l’élément apparaît haut.</p>
+                                    <p className="admin-form-hint">
+                                        Plus le nombre est petit, plus l’élément
+                                        apparaît haut.
+                                    </p>
                                 </div>
                             </div>
-                            
+
                             <div className="admin-field mt-4">
-                                <label>Description <span className="text-[#9aaa9f] font-normal lowercase">(facultative)</span></label>
+                                <label>
+                                    Description{' '}
+                                    <span className="font-normal text-[#9aaa9f] lowercase">
+                                        (facultative)
+                                    </span>
+                                </label>
                                 <input
                                     value={form.data.description}
-                                    onChange={(e) => form.setData('description', e.target.value)}
+                                    onChange={(e) =>
+                                        form.setData(
+                                            'description',
+                                            e.target.value,
+                                        )
+                                    }
                                     placeholder="Information utile pour l’équipe"
                                 />
                             </div>
-                            
+
                             <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
-                                <label className="flex items-center gap-2.5 text-[13px] font-medium text-[#17352a] cursor-pointer">
+                                <label className="flex cursor-pointer items-center gap-2.5 text-[13px] font-medium text-[#17352a]">
                                     <input
                                         type="checkbox"
                                         checked={form.data.active}
-                                        onChange={(e) => form.setData('active', e.target.checked)}
-                                        className="size-4.5 rounded text-[#174a31] focus:ring-[#174a31]/20 cursor-pointer"
+                                        onChange={(e) =>
+                                            form.setData(
+                                                'active',
+                                                e.target.checked,
+                                            )
+                                        }
+                                        className="size-4.5 cursor-pointer rounded text-[#174a31] focus:ring-[#174a31]/20"
                                     />
                                     Visible dans l’application
                                 </label>
@@ -307,7 +378,9 @@ export default function ReferencesAdmin({ categories, items, stats }: Props) {
                                         disabled={form.processing}
                                         className="admin-btn-submit"
                                     >
-                                        {editing ? 'Enregistrer' : 'Ajouter au référentiel'}
+                                        {editing
+                                            ? 'Enregistrer'
+                                            : 'Ajouter au référentiel'}
                                     </button>
                                 </div>
                             </div>
@@ -316,39 +389,69 @@ export default function ReferencesAdmin({ categories, items, stats }: Props) {
                         <div className="admin-card">
                             <div className="flex flex-col justify-between gap-3 border-b border-[#e5e1d8] p-5 sm:flex-row sm:items-center">
                                 <div>
-                                    <h3 className="font-semibold text-[15px] text-[#17352a]">{categories[category]}</h3>
-                                    <p className="text-[12.5px] text-[#637069]">{visible.length} élément(s)</p>
+                                    <h3 className="text-[15px] font-semibold text-[#17352a]">
+                                        {categories[category]}
+                                    </h3>
+                                    <p className="text-[12.5px] text-[#637069]">
+                                        {visible.length} élément(s)
+                                    </p>
                                 </div>
                                 <div className="admin-search mb-0 w-full sm:w-auto">
                                     <Search size={16} />
                                     <input
                                         value={query}
-                                        onChange={(e) => setQuery(e.target.value)}
+                                        onChange={(e) =>
+                                            setQuery(e.target.value)
+                                        }
                                         placeholder="Rechercher…"
                                     />
                                 </div>
                             </div>
-                            
+
                             <div className="divide-y divide-[#e5e1d8]">
                                 {visible.map((item) => (
-                                    <div key={item.id} className="flex items-center justify-between gap-4 px-5 py-3.5 hover:bg-[#f9f8f5] transition-colors">
+                                    <div
+                                        key={item.id}
+                                        className="flex items-center justify-between gap-4 px-5 py-3.5 transition-colors hover:bg-[#f9f8f5]"
+                                    >
                                         <div className="min-w-0">
                                             <div className="flex flex-wrap items-center gap-2">
-                                                <span className="font-semibold text-[13.5px] text-[#17352a]">{item.label}</span>
-                                                {isTeamCategory && (
-                                                    item.member_account ? (
+                                                <span className="text-[13.5px] font-semibold text-[#17352a]">
+                                                    {item.label}
+                                                </span>
+                                                {isTeamCategory &&
+                                                    (item.member_account ? (
                                                         <span className="admin-badge admin-badge--green">
-                                                            <UserCheck size={12} />
-                                                            Compte : {item.member_account.name}
+                                                            <UserCheck
+                                                                size={12}
+                                                            />
+                                                            Compte :{' '}
+                                                            {
+                                                                item
+                                                                    .member_account
+                                                                    .name
+                                                            }
                                                         </span>
                                                     ) : (
                                                         <span className="admin-badge admin-badge--gold">
                                                             SANS COMPTE
                                                         </span>
-                                                    )
-                                                )}
-                                                <span className={`admin-badge ${item.active ? 'admin-badge--gray' : ''}`} style={!item.active ? { background: '#eeeae2', color: '#797a73' } : {}}>
-                                                    {item.active ? 'ACTIF' : 'MASQUÉ'}
+                                                    ))}
+                                                <span
+                                                    className={`admin-badge ${item.active ? 'admin-badge--gray' : ''}`}
+                                                    style={
+                                                        !item.active
+                                                            ? {
+                                                                  background:
+                                                                      '#eeeae2',
+                                                                  color: '#797a73',
+                                                              }
+                                                            : {}
+                                                    }
+                                                >
+                                                    {item.active
+                                                        ? 'ACTIF'
+                                                        : 'MASQUÉ'}
                                                 </span>
                                             </div>
                                             {item.description && (
@@ -358,16 +461,17 @@ export default function ReferencesAdmin({ categories, items, stats }: Props) {
                                             )}
                                         </div>
                                         <div className="flex shrink-0 gap-2">
-                                            {isTeamCategory && !item.member_account && (
-                                                <Link
-                                                    href={`/admin/members?reference_item_id=${item.id}`}
-                                                    className="admin-btn-icon"
-                                                    aria-label={`Créer un compte pour ${item.label}`}
-                                                    title="Créer le compte de connexion"
-                                                >
-                                                    <UserPlus size={15} />
-                                                </Link>
-                                            )}
+                                            {isTeamCategory &&
+                                                !item.member_account && (
+                                                    <Link
+                                                        href={`/admin/members?reference_item_id=${item.id}`}
+                                                        className="admin-btn-icon"
+                                                        aria-label={`Créer un compte pour ${item.label}`}
+                                                        title="Créer le compte de connexion"
+                                                    >
+                                                        <UserPlus size={15} />
+                                                    </Link>
+                                                )}
                                             <button
                                                 onClick={() => edit(item)}
                                                 className="admin-btn-icon"
@@ -377,7 +481,7 @@ export default function ReferencesAdmin({ categories, items, stats }: Props) {
                                             </button>
                                             <button
                                                 onClick={() => remove(item)}
-                                                className="admin-btn-icon hover:!bg-[#fdf2f1] hover:!text-[#c0392b] hover:!border-[#f5c6c2]"
+                                                className="admin-btn-icon hover:!border-[#f5c6c2] hover:!bg-[#fdf2f1] hover:!text-[#c0392b]"
                                                 aria-label="Supprimer"
                                             >
                                                 <Trash2 size={15} />

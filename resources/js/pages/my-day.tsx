@@ -1,697 +1,654 @@
 import { Head, useForm } from '@inertiajs/react';
-import {
-    AlertTriangle,
-    CalendarDays,
-    Check,
-    ClipboardCheck,
-    FileClock,
-    Lock,
-    MapPin,
-    Search,
-} from 'lucide-react';
+import { Check, Lightbulb, Search, SlidersHorizontal } from 'lucide-react';
+import type { FormEvent } from 'react';
 import { useMemo, useState } from 'react';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { offlineQueue } from '@/lib/offline-queue';
-import { useI18n } from '@/lib/i18n';
 
-type Motif = {
+type Motif = { id: number; code: string; libelle: string; recevable: boolean };
+type WorkOrder = {
     id: number;
-    code: string;
-    libelle: string;
-    recevable: boolean;
-    preuve_requise: string;
+    reference: string;
+    objet: string;
+    cible_libelle?: string | null;
 };
+type Unit = { id: number; code: string; nom: string };
 type Task = {
     id: number;
     reference: string;
-    source: string;
     titre: string;
-    description?: string | null;
     instruction?: string | null;
+    description?: string | null;
     lieu?: string | null;
     date_due: string;
     heure_due?: string | null;
-    priorite: string;
     statut: string;
-    quantite?: string | null;
-    unite?: string | null;
-    commentaire?: string | null;
-    motif_precision?: string | null;
-    dde_reference?: string | null;
-    site?: { id: number; code: string; nom: string } | null;
-    departement?: { id: number; code: string; nom: string } | null;
-    motif?: Pick<Motif, 'id' | 'code' | 'libelle' | 'recevable'> | null;
-    evenements: Array<{
-        id: number;
-        type: string;
-        resume: string;
-        user_nom: string;
-        created_at: string;
-    }>;
+    statut_approbation?: string;
     can_act: boolean;
-    responsable_nom?: string | null;
-    mon_departement: boolean;
-};
-type Closure = {
-    id: number;
-    date: string;
-    site?: { code: string } | null;
-    departement?: { code: string } | null;
 };
 type Props = {
     tasks: Task[];
     motifs: Motif[];
-    closures: Closure[];
-    stats: {
-        assigned: number;
-        open: number;
-        late: number;
-        doneToday: number;
-    };
-    vueParDefaut: string;
+    openWorkOrders: WorkOrder[];
+    units: Unit[];
 };
 
 const today = new Date().toISOString().slice(0, 10);
-
-const formatDateTime = (value: string): string =>
-    new Intl.DateTimeFormat('fr-FR', {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-    }).format(new Date(value));
-
-const taskTone = (task: Task) => {
-    if (task.statut === 'faite') return 'border-emerald-200 bg-emerald-50/60';
-    if (task.statut === 'non_faite_non_justifiee')
-        return 'border-red-200 bg-red-50/70';
-    if (task.statut === 'non_faite_justifiee')
-        return 'border-amber-200 bg-amber-50/70';
-    if (task.date_due < today) return 'border-red-200 bg-white';
-
-    return 'border-[#ded8ca] bg-white';
+const fieldClass =
+    'mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15 dark:border-slate-600 dark:bg-slate-900 dark:text-white';
+const statusLabels: Record<string, string> = {
+    a_faire: 'À faire',
+    faite: 'Faite',
+    non_faite_justifiee: 'Justifiée',
+    non_faite_non_justifiee: 'Non recevable',
+    reportee: 'Reportée',
+    annulee: 'Annulée',
+};
+const statusClasses: Record<string, string> = {
+    a_faire:
+        'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300',
+    faite: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300',
+    non_faite_justifiee:
+        'bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-300',
+    non_faite_non_justifiee:
+        'bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-300',
+    reportee:
+        'bg-violet-100 text-violet-800 dark:bg-violet-500/15 dark:text-violet-300',
+    annulee:
+        'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200',
 };
 
-export default function MyDay({
-    tasks,
-    motifs,
-    closures,
-    stats,
-    vueParDefaut,
-}: Props) {
-    const { tr } = useI18n();
-    const statusText: Record<string, string> = {
-        a_faire: tr('À faire'),
-        faite: tr('Faite'),
-        non_faite_justifiee: tr('Justifiée'),
-        non_faite_non_justifiee: tr('Non recevable'),
-        reportee: tr('Reportée'),
-        annulee: tr('Annulée'),
+function dateParts(value: string) {
+    const date = new Date(`${value.slice(0, 10)}T00:00:00`);
+    const lateDays = Math.max(
+        0,
+        Math.floor(
+            (new Date(`${today}T00:00:00`).getTime() - date.getTime()) /
+                86_400_000,
+        ),
+    );
+
+    return {
+        label: new Intl.DateTimeFormat('fr-FR', {
+            day: '2-digit',
+            month: '2-digit',
+        }).format(date),
+        lateDays,
     };
-    const [selected, setSelected] = useState<Task | null>(
-        tasks.find((task) => task.statut === 'a_faire') ?? tasks[0] ?? null,
-    );
+}
+
+export default function MyDay({ tasks, motifs, openWorkOrders, units }: Props) {
     const [query, setQuery] = useState('');
-    const [mode, setMode] = useState<'open' | 'done' | 'all'>('open');
-    const [scope, setScope] = useState<'mine' | 'department' | 'team'>(
-        vueParDefaut === 'tout' ? 'team' : 'mine',
-    );
+    const [proposalOpen, setProposalOpen] = useState(false);
+    const [completeTask, setCompleteTask] = useState<Task | null>(null);
+    const [justifyTask, setJustifyTask] = useState<Task | null>(null);
+    const proposalForm = useForm({
+        titre: '',
+        description: '',
+        date_due: today,
+        justification: '',
+        cout_estime: '',
+    });
     const completeForm = useForm({ quantite: '', unite: '', commentaire: '' });
     const justifyForm = useForm({
-        motif_id: motifs[0]?.id ? String(motifs[0].id) : '',
+        motif_id: motifs[0] ? String(motifs[0].id) : '',
         motif_precision: '',
+        ordre_travail_id: '',
     });
-
-    const filtered = useMemo(
-        () =>
-            tasks.filter((task) => {
-                const matchesMode =
-                    mode === 'all' ||
-                    (mode === 'open' && task.statut === 'a_faire') ||
-                    (mode === 'done' && task.statut !== 'a_faire');
-                const matchesQuery =
-                    `${task.titre} ${task.reference} ${task.lieu ?? ''} ${task.site?.code ?? ''}`
-                        .toLowerCase()
-                        .includes(query.toLowerCase());
-
-                const matchesScope =
-                    scope === 'team' ||
-                    (scope === 'department'
-                        ? task.mon_departement
-                        : task.can_act);
-                return matchesMode && matchesQuery && matchesScope;
-            }),
-        [tasks, mode, query, scope],
+    const selectedMotif = motifs.find(
+        (motif) => String(motif.id) === justifyForm.data.motif_id,
     );
+    const needsWorkOrder = selectedMotif?.code.toUpperCase() === 'PANNE';
 
-    const complete = (event: React.FormEvent) => {
+    const visibleTasks = useMemo(() => {
+        const normalized = query.trim().toLocaleLowerCase('fr');
+
+        return tasks.filter((task) => {
+            const taskDate = task.date_due.slice(0, 10);
+            const belongsToUser = task.can_act;
+            const due =
+                taskDate === today ||
+                (task.statut === 'a_faire' && taskDate <= today);
+            const matches =
+                `${task.titre} ${task.reference} ${task.lieu ?? ''} ${task.instruction ?? ''}`
+                    .toLocaleLowerCase('fr')
+                    .includes(normalized);
+
+            return belongsToUser && due && matches;
+        });
+    }, [query, tasks]);
+
+    const submitProposal = (event: FormEvent) => {
         event.preventDefault();
-        if (!selected) return;
-
-        if (!navigator.onLine) {
-            offlineQueue.enqueue({
-                method: 'POST',
-                url: `/journee/taches/${selected.id}/complete`,
-                payload: completeForm.data,
-                label: `Tâche faite : ${selected.reference}`,
-            });
-            completeForm.reset('quantite', 'unite', 'commentaire');
-            return;
-        }
-
-        completeForm.post(`/journee/taches/${selected.id}/complete`, {
+        proposalForm.post('/journee/propositions', {
             preserveScroll: true,
-            onSuccess: () =>
-                completeForm.reset('quantite', 'unite', 'commentaire'),
+            onSuccess: () => {
+                proposalForm.reset();
+                proposalForm.setData('date_due', today);
+                setProposalOpen(false);
+            },
         });
     };
 
-    const justify = (event: React.FormEvent) => {
+    const submitComplete = (event: FormEvent) => {
         event.preventDefault();
-        if (!selected) return;
+
+        if (!completeTask) {
+            return;
+        }
+
+        const url = `/journee/taches/${completeTask.id}/complete`;
 
         if (!navigator.onLine) {
             offlineQueue.enqueue({
                 method: 'POST',
-                url: `/journee/taches/${selected.id}/justify`,
-                payload: justifyForm.data,
-                label: `Justification : ${selected.reference}`,
+                url,
+                payload: completeForm.data,
+                label: `Tâche faite : ${completeTask.reference}`,
             });
-            justifyForm.reset('motif_precision');
+            completeForm.reset();
+            setCompleteTask(null);
+
             return;
         }
 
-        justifyForm.post(`/journee/taches/${selected.id}/justify`, {
+        completeForm.post(url, {
             preserveScroll: true,
-            onSuccess: () => justifyForm.reset('motif_precision'),
+            onSuccess: () => {
+                completeForm.reset();
+                setCompleteTask(null);
+            },
+        });
+    };
+
+    const submitJustification = (event: FormEvent) => {
+        event.preventDefault();
+
+        if (!justifyTask) {
+            return;
+        }
+
+        const url = `/journee/taches/${justifyTask.id}/justify`;
+
+        if (!navigator.onLine) {
+            offlineQueue.enqueue({
+                method: 'POST',
+                url,
+                payload: justifyForm.data,
+                label: `Justification : ${justifyTask.reference}`,
+            });
+            justifyForm.reset('motif_precision', 'ordre_travail_id');
+            setJustifyTask(null);
+
+            return;
+        }
+
+        justifyForm.post(url, {
+            preserveScroll: true,
+            onSuccess: () => {
+                justifyForm.reset('motif_precision', 'ordre_travail_id');
+                setJustifyTask(null);
+            },
         });
     };
 
     return (
         <>
-            <Head title={tr('Ma journée')} />
-            <main className="min-h-screen bg-slate-50 px-4 py-5 text-slate-800 sm:px-6 lg:px-8">
-                <div className="mx-auto max-w-7xl space-y-6">
-                    <section className="bg-glass relative overflow-hidden rounded-2xl border border-emerald-950/5 p-6 shadow-sm">
-                        <div className="pointer-events-none absolute top-0 right-0 h-96 w-96 translate-x-1/3 -translate-y-1/2 rounded-full bg-gradient-to-br from-emerald-400/20 to-transparent p-12 blur-3xl"></div>
-                        <div className="relative z-10 flex flex-wrap items-start justify-between gap-4">
-                            <div>
-                                <p className="text-xs font-bold tracking-widest text-emerald-600 uppercase">
-                                    {tr('Poste terrain')}
-                                </p>
-                                <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
-                                    {tr('Ma journée')}
-                                </h1>
-                                <p className="mt-2 text-sm font-medium text-slate-500">
-                                    {tr(
-                                        'Chaque tâche reçoit une réponse: faite ou justifiée.',
-                                    )}
-                                </p>
-                            </div>
-                            {closures.length > 0 && (
-                                <div className="flex items-center rounded-xl border border-emerald-200/50 bg-emerald-50/50 px-4 py-3 text-sm font-semibold text-emerald-800 shadow-sm backdrop-blur-md">
-                                    <Lock className="mr-2.5" size={16} />
-                                    {closures.length}{' '}
-                                    {tr("clôture(s) aujourd'hui")}
-                                </div>
-                            )}
-                        </div>
-                    </section>
+            <Head title="Ma journée" />
+            <main className="min-h-screen w-full bg-slate-50 px-4 py-6 text-slate-900 sm:px-6 lg:px-8 dark:bg-slate-950 dark:text-slate-100">
+                <div className="w-full space-y-6">
+                    <header className="flex flex-wrap items-center justify-between gap-4">
+                        <h1 className="text-3xl font-bold tracking-tight">
+                            Ma journée
+                        </h1>
+                        <button
+                            type="button"
+                            onClick={() => setProposalOpen(true)}
+                            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
+                        >
+                            <Lightbulb size={18} /> Proposer une action
+                        </button>
+                    </header>
 
-                    <section className="grid gap-4 md:grid-cols-4">
-                        {[
-                            {
-                                label: tr('Assignées'),
-                                value: stats.assigned,
-                                icon: ClipboardCheck,
-                            },
-                            {
-                                label: tr('Ouvertes'),
-                                value: stats.open,
-                                icon: CalendarDays,
-                            },
-                            {
-                                label: tr('En retard'),
-                                value: stats.late,
-                                icon: AlertTriangle,
-                                danger: stats.late > 0,
-                            },
-                            {
-                                label: tr('Faites'),
-                                value: stats.doneToday,
-                                icon: Check,
-                            },
-                        ].map(({ label, value, icon: Icon, danger }) => (
-                            <div
-                                key={label}
-                                className={`bg-glass hover-lift rounded-2xl border p-5 shadow-sm transition-all duration-300 ${danger ? 'border-red-200 shadow-red-100' : 'border-emerald-950/5'}`}
+                    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                        <div className="flex justify-end gap-2 border-b border-slate-200 p-4 dark:border-slate-800">
+                            <label className="relative block w-full max-w-xs">
+                                <Search
+                                    size={17}
+                                    className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-400"
+                                />
+                                <span className="sr-only">Rechercher</span>
+                                <input
+                                    value={query}
+                                    onChange={(event) =>
+                                        setQuery(event.target.value)
+                                    }
+                                    placeholder="Rechercher"
+                                    className="w-full rounded-lg border border-slate-300 bg-white py-2 pr-3 pl-9 text-sm outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15 dark:border-slate-700 dark:bg-slate-950"
+                                />
+                            </label>
+                            <button
+                                type="button"
+                                aria-label="Gérer les colonnes"
+                                className="rounded-lg border border-slate-300 p-2 text-slate-500 dark:border-slate-700 dark:text-slate-300"
                             >
-                                <div className="flex items-start justify-between">
-                                    <span className="text-xs font-bold tracking-wider text-slate-500 uppercase">
-                                        {label}
-                                    </span>
-                                    <span
-                                        className={`grid size-10 place-items-center rounded-xl shadow-sm ${danger ? 'bg-gradient-to-br from-red-50 to-red-100 text-red-600' : 'bg-gradient-to-br from-emerald-50 to-emerald-100 text-emerald-600'}`}
-                                    >
-                                        <Icon size={18} strokeWidth={2.5} />
-                                    </span>
-                                </div>
-                                <div
-                                    className={`mt-5 text-4xl font-extrabold ${danger ? 'text-red-600' : 'text-slate-800'}`}
-                                >
-                                    {value}
-                                </div>
-                            </div>
-                        ))}
-                    </section>
-
-                    <section className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,.95fr)_minmax(320px,1.05fr)]">
-                        <div className="space-y-4">
-                            <div className="bg-glass rounded-2xl border border-emerald-950/5 p-4 shadow-sm">
-                                <div className="mb-4 flex flex-wrap gap-2">
-                                    {[
-                                        ['mine', tr('Mes tâches')],
-                                        ['department', tr('Mon département')],
-                                        ['team', tr('Toute la ferme')],
-                                    ].map(([value, label]) => (
-                                        <button
-                                            key={value}
-                                            type="button"
-                                            onClick={() =>
-                                                setScope(
-                                                    value as
-                                                        | 'mine'
-                                                        | 'department'
-                                                        | 'team',
-                                                )
-                                            }
-                                            className={`rounded-xl px-4 py-2.5 text-sm font-semibold shadow-sm transition-all duration-200 ${scope === value ? 'bg-slate-800 text-white' : 'border border-slate-200 bg-white text-slate-600'}`}
-                                        >
-                                            {label}
-                                        </button>
-                                    ))}
-                                </div>
-                                <p className="mb-4 text-xs font-medium text-slate-500">
-                                    {scope === 'team'
-                                        ? tr(
-                                              'Registre de toute la ferme : vous voyez les tâches sans pouvoir agir à la place d’un collègue.',
-                                          )
-                                        : scope === 'department'
-                                          ? tr(
-                                                'Les tâches de votre département, y compris celles de vos collègues.',
-                                            )
-                                          : tr(
-                                                'Vos tâches et celles auxquelles vous participez.',
-                                            )}
-                                </p>
-                                <div className="mb-4 flex flex-wrap gap-2">
-                                    {[
-                                        ['open', tr('À faire')],
-                                        ['done', tr('Traitées')],
-                                        ['all', tr('Toutes')],
-                                    ].map(([value, label]) => (
-                                        <button
-                                            key={value}
-                                            type="button"
-                                            onClick={() =>
-                                                setMode(
-                                                    value as
-                                                        'open' | 'done' | 'all',
-                                                )
-                                            }
-                                            className={`rounded-xl px-4 py-2.5 text-sm font-semibold shadow-sm transition-all duration-200 ${mode === value ? 'bg-gradient-to-r from-emerald-600 to-emerald-700 text-white shadow-emerald-200' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
-                                        >
-                                            {label}
-                                        </button>
-                                    ))}
-                                </div>
-                                <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 shadow-sm transition-all focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500">
-                                    <Search
-                                        size={18}
-                                        className="text-slate-400"
-                                    />
-                                    <input
-                                        value={query}
-                                        onChange={(event) =>
-                                            setQuery(event.target.value)
-                                        }
-                                        className="h-12 w-full bg-transparent text-sm font-medium text-slate-800 outline-none placeholder:text-slate-400"
-                                        placeholder={tr(
-                                            'Chercher une tâche...',
-                                        )}
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="grid gap-3">
-                                {filtered.map((task) => (
-                                    <button
-                                        key={task.id}
-                                        type="button"
-                                        onClick={() => setSelected(task)}
-                                        className={`hover-lift relative overflow-hidden rounded-2xl border p-5 text-left shadow-sm transition-all duration-200 ${taskTone(task)} ${selected?.id === task.id ? 'scale-[1.02] border-emerald-500 ring-2 ring-emerald-500' : 'hover:border-emerald-200'}`}
-                                    >
-                                        {selected?.id === task.id && (
-                                            <div className="absolute top-0 bottom-0 left-0 w-1.5 rounded-l-2xl bg-emerald-500"></div>
-                                        )}
-                                        <div className="flex items-start justify-between gap-4">
-                                            <div>
-                                                <div className="line-clamp-2 text-base font-bold text-slate-800">
-                                                    {task.titre}
-                                                </div>
-                                                <div className="mt-2 text-xs font-medium tracking-wide text-slate-500">
-                                                    {task.reference} &bull;{' '}
-                                                    {task.date_due}
-                                                    {task.heure_due
-                                                        ? ` &bull; ${task.heure_due}`
-                                                        : ''}
-                                                </div>
-                                            </div>
-                                            <span
-                                                className={`shrink-0 rounded-lg px-2.5 py-1 text-xs font-bold tracking-wider uppercase ${task.statut === 'a_faire' ? 'bg-amber-100 text-amber-700' : task.statut === 'faite' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}
-                                            >
-                                                {statusText[task.statut] ??
-                                                    task.statut}
-                                            </span>
-                                        </div>
-                                        <div className="mt-4 flex items-center gap-2 text-sm font-medium text-slate-500">
-                                            <MapPin
-                                                size={16}
-                                                className="text-slate-400"
-                                            />{' '}
-                                            {task.lieu ||
-                                                task.site?.nom ||
-                                                tr('Lieu libre')}
-                                            {!task.can_act && (
-                                                <span className="ml-auto rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
-                                                    Responsable :{' '}
-                                                    {task.responsable_nom ??
-                                                        tr('Non assignée')}
-                                                </span>
-                                            )}
-                                        </div>
-                                    </button>
-                                ))}
-                                {filtered.length === 0 && (
-                                    <div className="rounded-2xl border border-dashed border-slate-300 bg-white/50 px-5 py-12 text-center text-sm font-medium text-slate-500 shadow-sm backdrop-blur-sm">
-                                        {tr(
-                                            'Aucune tâche ne correspond à vos critères.',
-                                        )}
-                                    </div>
-                                )}
-                            </div>
+                                <SlidersHorizontal size={18} />
+                            </button>
                         </div>
 
-                        <aside className="bg-glass sticky top-6 self-start overflow-hidden rounded-2xl border border-emerald-950/5 shadow-sm">
-                            <div className="border-b border-emerald-950/5 bg-white/50 p-6">
-                                {selected ? (
-                                    <>
-                                        <p className="text-xs font-bold tracking-widest text-emerald-600 uppercase">
-                                            {selected.reference}
-                                        </p>
-                                        <h2 className="mt-3 text-2xl leading-tight font-extrabold text-slate-800">
-                                            {selected.titre}
-                                        </h2>
-                                        <p className="mt-3 inline-flex items-center gap-2 rounded-lg bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-500">
-                                            <MapPin size={14} />{' '}
-                                            {selected.site?.code ??
-                                                tr('Site libre')}{' '}
-                                            &bull;{' '}
-                                            {selected.departement?.code ??
-                                                tr('Dépt libre')}{' '}
-                                            &bull;{' '}
-                                            {selected.lieu ?? tr('Lieu libre')}
-                                        </p>
-                                    </>
-                                ) : (
-                                    <h2 className="py-4 text-center text-xl font-bold text-slate-400">
-                                        {tr('Aucune tâche sélectionnée')}
-                                    </h2>
-                                )}
-                            </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full min-w-[780px] text-left text-sm">
+                                <thead className="bg-slate-50 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:bg-slate-950/60 dark:text-slate-400">
+                                    <tr>
+                                        <th className="px-5 py-3.5">
+                                            Échéance
+                                        </th>
+                                        <th className="px-5 py-3.5">Tâche</th>
+                                        <th className="px-5 py-3.5">
+                                            Instruction
+                                        </th>
+                                        <th className="px-5 py-3.5">Statut</th>
+                                        <th className="px-5 py-3.5">
+                                            <span className="sr-only">
+                                                Actions
+                                            </span>
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                                    {visibleTasks.map((task) => {
+                                        const due = dateParts(task.date_due);
+                                        const canExecute =
+                                            task.statut === 'a_faire' &&
+                                            (!task.statut_approbation ||
+                                                task.statut_approbation ===
+                                                    'approuvee');
 
-                            {selected && (
-                                <div className="space-y-6 bg-slate-50/30 p-6">
-                                    {selected.instruction && (
-                                        <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-5 text-sm leading-relaxed font-medium text-emerald-900 shadow-inner">
-                                            <div className="mb-2 text-xs font-bold tracking-wider text-emerald-600 uppercase">
-                                                {tr('Instructions')}
-                                            </div>
-                                            {selected.instruction}
-                                        </div>
-                                    )}
-
-                                    {selected.statut === 'a_faire' &&
-                                    selected.can_act ? (
-                                        <div className="grid gap-5 xl:grid-cols-2">
-                                            <form
-                                                onSubmit={complete}
-                                                className="rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
+                                        return (
+                                            <tr
+                                                key={task.id}
+                                                className="even:bg-slate-50/60 dark:even:bg-slate-950/30"
                                             >
-                                                <div className="mb-4 flex items-center gap-2.5 text-lg font-bold text-emerald-700">
-                                                    <div className="rounded-lg bg-emerald-100 p-1.5">
-                                                        <Check
-                                                            size={18}
-                                                            strokeWidth={3}
-                                                        />
-                                                    </div>{' '}
-                                                    {tr('Faite')}
-                                                </div>
-                                                <div className="grid gap-4 sm:grid-cols-2">
-                                                    <label className="grid gap-1.5 text-xs font-bold tracking-wider text-slate-500 uppercase">
-                                                        {tr('Quantité')}
-                                                        <input
-                                                            type="number"
-                                                            min="0"
-                                                            step="0.0001"
-                                                            value={
-                                                                completeForm
-                                                                    .data
-                                                                    .quantite
-                                                            }
-                                                            onChange={(event) =>
-                                                                completeForm.setData(
-                                                                    'quantite',
-                                                                    event.target
-                                                                        .value,
-                                                                )
-                                                            }
-                                                            className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-medium text-slate-800 transition-all outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
-                                                        />
-                                                        <span className="text-[11px] font-medium tracking-normal text-slate-400 normal-case">
-                                                            {tr(
-                                                                'Facultatif : volume réellement exécuté.',
-                                                            )}
-                                                        </span>
-                                                    </label>
-                                                    <label className="grid gap-1.5 text-xs font-bold tracking-wider text-slate-500 uppercase">
-                                                        {tr('Unité')}
-                                                        <input
-                                                            value={
-                                                                completeForm
-                                                                    .data.unite
-                                                            }
-                                                            onChange={(event) =>
-                                                                completeForm.setData(
-                                                                    'unite',
-                                                                    event.target
-                                                                        .value,
-                                                                )
-                                                            }
-                                                            className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-medium text-slate-800 transition-all outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
-                                                        />
-                                                        <span className="text-[11px] font-medium tracking-normal text-slate-400 normal-case">
-                                                            {tr(
-                                                                'Ex : planches, kg, litres, passage.',
-                                                            )}
-                                                        </span>
-                                                    </label>
-                                                </div>
-                                                <label className="mt-4 grid gap-1.5 text-xs font-bold tracking-wider text-slate-500 uppercase">
-                                                    {tr('Commentaire')}
-                                                    <textarea
-                                                        rows={3}
-                                                        value={
-                                                            completeForm.data
-                                                                .commentaire
+                                                <td className="px-5 py-4 align-top">
+                                                    <div
+                                                        className={
+                                                            due.lateDays
+                                                                ? 'font-semibold text-red-600 dark:text-red-400'
+                                                                : 'font-medium'
                                                         }
-                                                        onChange={(event) =>
-                                                            completeForm.setData(
-                                                                'commentaire',
-                                                                event.target
-                                                                    .value,
-                                                            )
-                                                        }
-                                                        className="resize-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-800 transition-all outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
-                                                    />
-                                                    <span className="text-[11px] font-medium tracking-normal text-slate-400 normal-case">
-                                                        {tr(
-                                                            'Ajoutez ce qui aide l’admin à comprendre le résultat.',
-                                                        )}
-                                                    </span>
-                                                </label>
-                                                <button
-                                                    type="submit"
-                                                    disabled={
-                                                        completeForm.processing
-                                                    }
-                                                    className="mt-5 inline-flex h-11 w-full items-center justify-center rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 text-sm font-bold text-white shadow-sm transition-all hover:from-emerald-700 hover:to-emerald-800 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:opacity-70"
-                                                >
-                                                    {tr('Enregistrer')}
-                                                </button>
-                                            </form>
-
-                                            <form
-                                                onSubmit={justify}
-                                                className="rounded-2xl border border-amber-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
-                                            >
-                                                <div className="mb-4 flex items-center gap-2.5 text-lg font-bold text-amber-700">
-                                                    <div className="rounded-lg bg-amber-100 p-1.5">
-                                                        <FileClock
-                                                            size={18}
-                                                            strokeWidth={2.5}
-                                                        />
-                                                    </div>{' '}
-                                                    {tr('Justifiée')}
-                                                </div>
-                                                <label className="grid gap-1.5 text-xs font-bold tracking-wider text-slate-500 uppercase">
-                                                    {tr('Motif')}
-                                                    <select
-                                                        value={
-                                                            justifyForm.data
-                                                                .motif_id
-                                                        }
-                                                        onChange={(event) =>
-                                                            justifyForm.setData(
-                                                                'motif_id',
-                                                                event.target
-                                                                    .value,
-                                                            )
-                                                        }
-                                                        className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-medium text-slate-800 transition-all outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20"
                                                     >
-                                                        {motifs.map((motif) => (
-                                                            <option
-                                                                key={motif.id}
-                                                                value={motif.id}
+                                                        {due.label}
+                                                    </div>
+                                                    <div className="mt-1 text-xs text-slate-500">
+                                                        {due.lateDays
+                                                            ? `Retard ${due.lateDays} j`
+                                                            : task.heure_due?.slice(
+                                                                  0,
+                                                                  5,
+                                                              )}
+                                                    </div>
+                                                </td>
+                                                <td className="px-5 py-4 align-top">
+                                                    <div className="font-semibold">
+                                                        {task.titre}
+                                                    </div>
+                                                    <div className="mt-1 text-xs text-slate-500">
+                                                        {[
+                                                            task.reference,
+                                                            task.lieu,
+                                                        ]
+                                                            .filter(Boolean)
+                                                            .join(' · ')}
+                                                    </div>
+                                                </td>
+                                                <td className="max-w-sm px-5 py-4 align-top text-slate-600 dark:text-slate-300">
+                                                    {task.instruction ||
+                                                        task.description ||
+                                                        '—'}
+                                                </td>
+                                                <td className="px-5 py-4 align-top">
+                                                    <span
+                                                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusClasses[task.statut] ?? statusClasses.annulee}`}
+                                                    >
+                                                        {task.statut_approbation ===
+                                                        'soumise'
+                                                            ? 'En approbation'
+                                                            : (statusLabels[
+                                                                  task.statut
+                                                              ] ?? task.statut)}
+                                                    </span>
+                                                </td>
+                                                <td className="px-5 py-4 align-top">
+                                                    {canExecute && (
+                                                        <div className="flex justify-end gap-2">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() =>
+                                                                    setCompleteTask(
+                                                                        task,
+                                                                    )
+                                                                }
+                                                                className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
                                                             >
-                                                                {motif.libelle}
-                                                                {motif.recevable
-                                                                    ? ''
-                                                                    : ' (RH)'}
-                                                            </option>
-                                                        ))}
-                                                    </select>
-                                                    <span className="text-[11px] font-medium tracking-normal text-slate-400 normal-case">
-                                                        {tr(
-                                                            'Choisissez la raison réelle de non-exécution.',
-                                                        )}
-                                                    </span>
-                                                </label>
-                                                <label className="mt-4 grid gap-1.5 text-xs font-bold tracking-wider text-slate-500 uppercase">
-                                                    {tr('Preuve / Détails')}
-                                                    <input
-                                                        value={
-                                                            justifyForm.data
-                                                                .motif_precision
-                                                        }
-                                                        onChange={(event) =>
-                                                            justifyForm.setData(
-                                                                'motif_precision',
-                                                                event.target
-                                                                    .value,
-                                                            )
-                                                        }
-                                                        className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-medium text-slate-800 transition-all outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20"
-                                                    />
-                                                    <span className="text-[11px] font-medium tracking-normal text-slate-400 normal-case">
-                                                        {tr(
-                                                            'Ex : bon de travail, responsable consulté, incident, article manquant.',
-                                                        )}
-                                                    </span>
-                                                </label>
-                                                <button
-                                                    type="submit"
-                                                    disabled={
-                                                        justifyForm.processing
-                                                    }
-                                                    className="mt-5 inline-flex h-11 w-full items-center justify-center rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-sm font-bold text-white shadow-sm transition-all hover:from-amber-600 hover:to-amber-700 focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 disabled:opacity-70"
-                                                >
-                                                    {tr('Justifier')}
-                                                </button>
-                                            </form>
-                                        </div>
-                                    ) : (
-                                        <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm">
-                                            <div className="mb-3 inline-block rounded-full bg-slate-100 p-3">
-                                                <Check
-                                                    size={24}
-                                                    className="text-emerald-500"
-                                                    strokeWidth={3}
-                                                />
-                                            </div>
-                                            <div className="text-lg font-bold text-slate-800">
-                                                {selected.statut === 'a_faire'
-                                                    ? tr('Tâche d’un collègue')
-                                                    : (statusText[
-                                                          selected.statut
-                                                      ] ?? selected.statut)}
-                                            </div>
-                                            <div className="mt-2 rounded-lg border border-slate-100 bg-slate-50 p-3 text-sm font-medium text-slate-500">
-                                                {selected.statut ===
-                                                    'a_faire' &&
-                                                !selected.can_act
-                                                    ? `${tr('Visible pour coordination. Responsable :')} ${selected.responsable_nom ?? tr('Non assignée')}.`
-                                                    : selected.commentaire ||
-                                                      selected.motif?.libelle ||
-                                                      selected.motif_precision ||
-                                                      tr(
-                                                          'Traitement enregistré avec succès.',
-                                                      )}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {selected.evenements.length > 0 && (
-                                        <div className="border-t border-emerald-950/5 pt-4">
-                                            <div className="mb-3 text-xs font-bold tracking-widest text-slate-400 uppercase">
-                                                {tr('Historique des actions')}
-                                            </div>
-                                            <div className="relative space-y-3 before:absolute before:inset-0 before:ml-2 before:h-full before:w-0.5 before:-translate-x-px before:bg-gradient-to-b before:from-transparent before:via-slate-200 before:to-transparent md:before:mx-auto md:before:translate-x-0">
-                                                {selected.evenements.map(
-                                                    (event) => (
-                                                        <div
-                                                            key={event.id}
-                                                            className="group is-active relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse"
-                                                        >
-                                                            <div className="w-[calc(100%-2rem)] rounded-xl border border-slate-200 bg-white p-3.5 text-sm shadow-sm transition-shadow hover:shadow-md md:w-[calc(50%-1.5rem)]">
-                                                                <div className="font-bold text-slate-800">
-                                                                    {
-                                                                        event.resume
-                                                                    }
-                                                                </div>
-                                                                <div className="mt-1.5 flex items-center justify-between text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
-                                                                    <span>
-                                                                        {
-                                                                            event.user_nom
-                                                                        }
-                                                                    </span>
-                                                                    <span>
-                                                                        {formatDateTime(
-                                                                            event.created_at,
-                                                                        )}
-                                                                    </span>
-                                                                </div>
-                                                            </div>
+                                                                Exécuter
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() =>
+                                                                    setJustifyTask(
+                                                                        task,
+                                                                    )
+                                                                }
+                                                                className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-800"
+                                                            >
+                                                                Justifier
+                                                            </button>
                                                         </div>
-                                                    ),
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </aside>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                        {visibleTasks.length === 0 && (
+                            <div className="px-6 py-14 text-center text-sm text-slate-500">
+                                Aucune tâche
+                            </div>
+                        )}
                     </section>
                 </div>
             </main>
+
+            <Dialog open={proposalOpen} onOpenChange={setProposalOpen}>
+                <DialogContent className="sm:max-w-2xl">
+                    <DialogHeader>
+                        <DialogTitle>Proposer une action</DialogTitle>
+                        <DialogDescription className="sr-only">
+                            Soumettre une nouvelle action à approbation.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={submitProposal} className="space-y-5">
+                        <label className="block text-sm font-medium">
+                            Quoi faire <span className="text-red-500">*</span>
+                            <input
+                                required
+                                autoFocus
+                                value={proposalForm.data.titre}
+                                onChange={(event) =>
+                                    proposalForm.setData(
+                                        'titre',
+                                        event.target.value,
+                                    )
+                                }
+                                className={fieldClass}
+                            />
+                            {proposalForm.errors.titre && (
+                                <span className="mt-1 block text-xs text-red-600">
+                                    {proposalForm.errors.titre}
+                                </span>
+                            )}
+                        </label>
+                        <label className="block text-sm font-medium">
+                            Détail
+                            <textarea
+                                rows={2}
+                                value={proposalForm.data.description}
+                                onChange={(event) =>
+                                    proposalForm.setData(
+                                        'description',
+                                        event.target.value,
+                                    )
+                                }
+                                className={fieldClass}
+                            />
+                        </label>
+                        <label className="block text-sm font-medium">
+                            Pour quand <span className="text-red-500">*</span>
+                            <input
+                                required
+                                type="date"
+                                value={proposalForm.data.date_due}
+                                onChange={(event) =>
+                                    proposalForm.setData(
+                                        'date_due',
+                                        event.target.value,
+                                    )
+                                }
+                                className={fieldClass}
+                            />
+                            {proposalForm.errors.date_due && (
+                                <span className="mt-1 block text-xs text-red-600">
+                                    {proposalForm.errors.date_due}
+                                </span>
+                            )}
+                        </label>
+                        <label className="block text-sm font-medium">
+                            Pourquoi — obligatoire{' '}
+                            <span className="text-red-500">*</span>
+                            <textarea
+                                required
+                                rows={2}
+                                value={proposalForm.data.justification}
+                                onChange={(event) =>
+                                    proposalForm.setData(
+                                        'justification',
+                                        event.target.value,
+                                    )
+                                }
+                                className={fieldClass}
+                            />
+                            {proposalForm.errors.justification && (
+                                <span className="mt-1 block text-xs text-red-600">
+                                    {proposalForm.errors.justification}
+                                </span>
+                            )}
+                        </label>
+                        <label className="block text-sm font-medium">
+                            Coût estimé (USD)
+                            <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={proposalForm.data.cout_estime}
+                                onChange={(event) =>
+                                    proposalForm.setData(
+                                        'cout_estime',
+                                        event.target.value,
+                                    )
+                                }
+                                className={fieldClass}
+                            />
+                            {proposalForm.errors.cout_estime && (
+                                <span className="mt-1 block text-xs text-red-600">
+                                    {proposalForm.errors.cout_estime}
+                                </span>
+                            )}
+                        </label>
+                        <DialogFooter className="sm:justify-start">
+                            <button
+                                type="submit"
+                                disabled={proposalForm.processing}
+                                className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                            >
+                                Soumettre
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setProposalOpen(false)}
+                                className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold dark:border-slate-600"
+                            >
+                                Annuler
+                            </button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog
+                open={completeTask !== null}
+                onOpenChange={(open) => !open && setCompleteTask(null)}
+            >
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Exécuter la tâche</DialogTitle>
+                        <DialogDescription>
+                            {completeTask?.titre}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={submitComplete} className="space-y-4">
+                        <div className="grid grid-cols-2 gap-3">
+                            <label className="text-sm font-medium">
+                                Quantité
+                                <input
+                                    type="number"
+                                    min="0"
+                                    step="any"
+                                    value={completeForm.data.quantite}
+                                    onChange={(event) =>
+                                        completeForm.setData(
+                                            'quantite',
+                                            event.target.value,
+                                        )
+                                    }
+                                    className={fieldClass}
+                                />
+                            </label>
+                            <label className="text-sm font-medium">
+                                Unité
+                                <select
+                                    value={completeForm.data.unite}
+                                    onChange={(event) =>
+                                        completeForm.setData(
+                                            'unite',
+                                            event.target.value,
+                                        )
+                                    }
+                                    className={fieldClass}
+                                >
+                                    <option value="">Select an option</option>
+                                    {units.map((unit) => (
+                                        <option key={unit.id} value={unit.code}>
+                                            {unit.nom} ({unit.code})
+                                        </option>
+                                    ))}
+                                </select>
+                            </label>
+                        </div>
+                        <label className="block text-sm font-medium">
+                            Commentaire
+                            <textarea
+                                rows={3}
+                                value={completeForm.data.commentaire}
+                                onChange={(event) =>
+                                    completeForm.setData(
+                                        'commentaire',
+                                        event.target.value,
+                                    )
+                                }
+                                className={fieldClass}
+                            />
+                        </label>
+                        <DialogFooter>
+                            <button
+                                type="submit"
+                                className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white"
+                            >
+                                <Check size={16} /> Enregistrer
+                            </button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog
+                open={justifyTask !== null}
+                onOpenChange={(open) => !open && setJustifyTask(null)}
+            >
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Justifier la tâche</DialogTitle>
+                        <DialogDescription>
+                            {justifyTask?.titre}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={submitJustification} className="space-y-4">
+                        <label className="block text-sm font-medium">
+                            Motif
+                            <select
+                                required
+                                value={justifyForm.data.motif_id}
+                                onChange={(event) =>
+                                    justifyForm.setData(
+                                        'motif_id',
+                                        event.target.value,
+                                    )
+                                }
+                                className={fieldClass}
+                            >
+                                {motifs.map((motif) => (
+                                    <option key={motif.id} value={motif.id}>
+                                        {motif.libelle}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+                        {needsWorkOrder && (
+                            <label className="block text-sm font-medium">
+                                Ordre de travail
+                                <select
+                                    required
+                                    value={justifyForm.data.ordre_travail_id}
+                                    onChange={(event) =>
+                                        justifyForm.setData(
+                                            'ordre_travail_id',
+                                            event.target.value,
+                                        )
+                                    }
+                                    className={fieldClass}
+                                >
+                                    <option value="">Sélectionner</option>
+                                    {openWorkOrders.map((order) => (
+                                        <option key={order.id} value={order.id}>
+                                            {order.reference} — {order.objet}
+                                        </option>
+                                    ))}
+                                </select>
+                            </label>
+                        )}
+                        <label className="block text-sm font-medium">
+                            Précision
+                            <textarea
+                                rows={3}
+                                value={justifyForm.data.motif_precision}
+                                onChange={(event) =>
+                                    justifyForm.setData(
+                                        'motif_precision',
+                                        event.target.value,
+                                    )
+                                }
+                                className={fieldClass}
+                            />
+                        </label>
+                        <DialogFooter>
+                            <button
+                                type="submit"
+                                className="rounded-lg bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white"
+                            >
+                                Enregistrer la justification
+                            </button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
         </>
     );
 }

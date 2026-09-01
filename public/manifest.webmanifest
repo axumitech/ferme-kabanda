@@ -42,12 +42,6 @@
             "short_name": "Terrain",
             "url": "/terrain",
             "icons": [{ "src": "/favicon.png", "sizes": "192x192" }]
-        },
-        {
-            "name": "Carnet terrain partagé",
-            "short_name": "Carnet",
-            "url": "/terrain/carnet",
-            "icons": [{ "src": "/favicon.png", "sizes": "192x192" }]
         }
     ]
 }

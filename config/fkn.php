@@ -5,6 +5,19 @@
  * la lecture sans changer les règles d'action dans les services métier.
  */
 return [
+    'version' => '1.8.0',
+    'version_date' => '2026-08-30',
+    'version_nom' => 'Maintenance et ordres de travail',
+
+    /* Valeurs de travail explicitement en attente de validation. */
+    'a_valider' => [
+        'taux_change_cdf' => 'Taux interne 2 200 CDF/USD - à confirmer par la Direction',
+        'grille_doa' => 'Plafonds 0 / 100 / 1 000 USD - proposition non arrêtée',
+        'prix_ezhl' => 'Prix premium ~7 USD/kg carcasse - à confronter au contrat en cours',
+        'parcellaire_k2' => 'Superficies K2 non relevées',
+        'cheptel_bovin' => 'Recensement du cheptel bovin non fait',
+    ],
+
     /*
      * Une entrée ne doit apparaître que dans une portée. Si elle est
      * accidentellement dupliquée, VisibiliteService applique la portée la plus
@@ -25,6 +38,8 @@ return [
         'rapports_terrain',
         'journal_terrain',
         'equipements',
+        'infrastructures',
+        'ordres_travail',
     ],
     'restreint' => [
         'montants_ventes',

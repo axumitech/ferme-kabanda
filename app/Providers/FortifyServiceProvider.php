@@ -50,9 +50,13 @@ class FortifyServiceProvider extends ServiceProvider
                 ->when($phone, fn ($query) => $query->orWhere('phone', $phone))
                 ->first();
 
-            return $user && Hash::check((string) $request->password, $user->password)
-                ? $user
-                : null;
+            if (! $user || ! $user->actif || ! Hash::check((string) $request->password, $user->password)) {
+                return null;
+            }
+
+            $user->forceFill(['derniere_connexion_at' => now()])->saveQuietly();
+
+            return $user;
         });
 
         Fortify::confirmPasswordsUsing(

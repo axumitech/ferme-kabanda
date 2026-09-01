@@ -52,6 +52,12 @@ class Numerotation
             'ENQ' => sprintf('ENQ-%d-%03d', $annee, $numero),
             'RQ' => sprintf('RQ-%d-%02d-%03d', $annee, $mois ?? (int) now()->format('n'), $numero),
             'BT' => sprintf('BT-%d-%02d-%03d', $annee, $mois ?? (int) now()->format('n'), $numero),
+            'OT' => sprintf('OT-%d-%02d-%03d', $annee, $mois ?? (int) now()->format('n'), $numero),
+            'INS' => sprintf('INS-%d-%02d-%03d', $annee, $mois ?? (int) now()->format('n'), $numero),
+            'FT' => sprintf('FT-%d-%02d-%03d', $annee, $mois ?? (int) now()->format('n'), $numero),
+            'MNT' => sprintf('MNT-%d-%02d-%03d', $annee, $mois ?? (int) now()->format('n'), $numero),
+            'PAT' => sprintf('PAT-%d-%02d-%03d', $annee, $mois ?? (int) now()->format('n'), $numero),
+            'MC' => sprintf('MC-%d-%02d-%03d', $annee, $mois ?? (int) now()->format('n'), $numero),
             default => sprintf('%s-%d-%04d', $cle, $annee, $numero),
         };
     }

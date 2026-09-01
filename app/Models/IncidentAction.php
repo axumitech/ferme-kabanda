@@ -22,4 +22,10 @@ class IncidentAction extends Model
     {
         return $this->belongsTo(Tache::class);
     }
+
+    /** @return BelongsTo<User, $this> */
+    public function responsable(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'responsable_id');
+    }
 }

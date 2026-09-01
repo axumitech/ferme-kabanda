@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Actions\DeactivateUser;
+use App\Enums\StatutTache;
 use App\Http\Controllers\Controller;
 use App\Models\Departement;
 use App\Models\ReferenceItem;
@@ -24,8 +25,14 @@ class MemberController extends Controller
 
         return Inertia::render('admin/members', [
             'members' => User::query()
-                ->select('id', 'name', 'email', 'phone', 'reference_item_id', 'site_id', 'departement_id', 'is_admin', 'niveau_hierarchie', 'created_at')
+                ->select('id', 'name', 'email', 'phone', 'reference_item_id', 'site_id', 'departement_id', 'is_admin', 'niveau_hierarchie', 'actif', 'derniere_connexion_at', 'created_at')
                 ->with(['teamMember:id,category,label', 'site:id,code,nom', 'departement:id,code,nom'])
+                ->withCount([
+                    'taches as assigned_tasks_count' => fn ($query) => $query->where('est_modele', false),
+                    'taches as open_tasks_count' => fn ($query) => $query
+                        ->where('est_modele', false)
+                        ->where('statut', StatutTache::AFaire),
+                ])
                 ->orderByDesc('is_admin')
                 ->orderBy('name')
                 ->get(),

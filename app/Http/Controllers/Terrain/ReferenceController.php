@@ -4,7 +4,10 @@ namespace App\Http\Controllers\Terrain;
 
 use App\Enums\StatutTache;
 use App\Http\Controllers\Controller;
+use App\Models\Equipement;
+use App\Models\Infrastructure;
 use App\Models\MotifNonExecution;
+use App\Models\OrdreTravail;
 use App\Models\Plantation;
 use App\Models\Recolte;
 use App\Models\Site;
@@ -22,6 +25,9 @@ use Illuminate\Http\Request;
  */
 class ReferenceController extends Controller
 {
+    /** @var list<string> */
+    private const STATUTS_OT_OUVERTS = ['demande', 'approuve', 'planifie', 'en_cours', 'realise', 'verifie'];
+
     public function __invoke(Request $request, FluxActiviteService $flux, VisibiliteService $visibilite): JsonResponse
     {
         /** @var User $user */
@@ -92,6 +98,30 @@ class ReferenceController extends Controller
                         'libelle' => trim("{$plantation->lieu} — {$plantation->culture->nom} ({$plantation->reference})"),
                         'unite' => $plantation->culture->unite_recolte ?? $plantation->unite ?? 'kg',
                     ])
+                    ->values(),
+                'equipements' => Equipement::query()
+                    ->where('actif', true)
+                    ->orderBy('code')
+                    ->get(['id', 'code', 'nom'])
+                    ->map(fn (Equipement $equipement): array => [
+                        'id' => $equipement->id,
+                        'libelle' => "{$equipement->code} — {$equipement->nom}",
+                    ])
+                    ->values(),
+                'infrastructures' => Infrastructure::query()
+                    ->where('actif', true)
+                    ->orderBy('code')
+                    ->get(['id', 'code', 'nom'])
+                    ->map(fn (Infrastructure $infrastructure): array => [
+                        'id' => $infrastructure->id,
+                        'libelle' => "{$infrastructure->code} — {$infrastructure->nom}",
+                    ])
+                    ->values(),
+                'ordres_travail' => OrdreTravail::query()
+                    ->whereIn('statut', self::STATUTS_OT_OUVERTS)
+                    ->orderByDesc('demande_le')
+                    ->limit(50)
+                    ->get(['id', 'reference', 'objet', 'cible_libelle', 'statut'])
                     ->values(),
                 'motifs' => MotifNonExecution::query()
                     ->where('actif', true)

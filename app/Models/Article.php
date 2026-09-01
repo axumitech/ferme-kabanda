@@ -23,7 +23,11 @@ class Article extends Model
         'prix_unitaire',
         'seuil_min',
         'site_id',
+        'emplacement_id',
         'centre_cout',
+        'cout_moyen_pondere',
+        'classe_abc',
+        'dernier_inventaire',
         'quantite_base',
         'actif',
     ];
@@ -51,6 +55,8 @@ class Article extends Model
             'seuil_min' => 'decimal:4',
             'quantite_base' => 'decimal:6',
             'facteur_personnalise' => 'decimal:6',
+            'cout_moyen_pondere' => 'decimal:6',
+            'dernier_inventaire' => 'date',
             'actif' => 'boolean',
         ];
     }
@@ -71,6 +77,12 @@ class Article extends Model
     public function site(): BelongsTo
     {
         return $this->belongsTo(Site::class);
+    }
+
+    /** @return BelongsTo<Emplacement, $this> */
+    public function emplacement(): BelongsTo
+    {
+        return $this->belongsTo(Emplacement::class);
     }
 
     /** @return HasMany<MouvementStock, $this> */

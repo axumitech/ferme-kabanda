@@ -2,10 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Enums\SourceTache;
 use App\Models\Departement;
 use App\Models\FarmRecord;
 use App\Models\ReferenceItem;
 use App\Models\Site;
+use App\Models\Tache;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -218,5 +220,69 @@ class AdminMemberTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->component('admin/members')
                 ->where('members.1.id', $member->id));
+    }
+
+    public function test_members_page_exposes_each_members_assigned_workload(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $member = User::factory()->create(['phone' => '243899999999']);
+
+        Tache::query()->create([
+            'reference' => 'TSK-MEMBER-001',
+            'source' => SourceTache::Manuelle,
+            'titre' => 'Tâche ouverte du membre',
+            'responsable_id' => $member->id,
+            'date_due' => today(),
+        ]);
+        Tache::query()->create([
+            'reference' => 'TSK-MEMBER-002',
+            'source' => SourceTache::Manuelle,
+            'titre' => 'Tâche terminée du membre',
+            'responsable_id' => $member->id,
+            'date_due' => today(),
+            'statut' => 'faite',
+            'fait_le' => now(),
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.members.index'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('members.1.id', $member->id)
+                ->where('members.1.assigned_tasks_count', 2)
+                ->where('members.1.open_tasks_count', 1));
+    }
+
+    public function test_active_member_can_sign_in_with_their_phone_number(): void
+    {
+        $member = User::factory()->create([
+            'phone' => '243812345699',
+            'password' => 'motdepasse123',
+            'actif' => true,
+            'derniere_connexion_at' => null,
+        ]);
+
+        $this->post(route('login'), [
+            'email' => '+243 812 345 699',
+            'password' => 'motdepasse123',
+        ])->assertRedirect(route('dashboard'));
+
+        $this->assertAuthenticatedAs($member);
+        $this->assertNotNull($member->fresh()->derniere_connexion_at);
+    }
+
+    public function test_inactive_member_cannot_sign_in(): void
+    {
+        User::factory()->create([
+            'phone' => '243812345698',
+            'password' => 'motdepasse123',
+            'actif' => false,
+        ]);
+
+        $this->post(route('login'), [
+            'email' => '+243 812 345 698',
+            'password' => 'motdepasse123',
+        ])->assertSessionHasErrors('email');
+
+        $this->assertGuest();
     }
 }

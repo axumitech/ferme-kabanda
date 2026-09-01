@@ -58,6 +58,7 @@ class TacheService
     public function marquerFaite(Tache $tache, array $donnees = []): Tache
     {
         $this->refuserSiJourneeVerrouillee($tache);
+        app(ApprobationTacheService::class)->verifierExecutable($tache);
 
         $tache->update(array_merge([
             'statut' => StatutTache::Faite,
@@ -68,6 +69,32 @@ class TacheService
         $tache->journaliserEvenement('faite', 'Exécution enregistrée', $donnees);
 
         return $tache;
+    }
+
+    /**
+     * @param  array<int, int|string>  $appuiIds
+     * @param  array<int, int|string>  $informeIds
+     */
+    public function definirIntervenants(Tache $tache, int $responsableId, array $appuiIds, array $informeIds): void
+    {
+        $tache->forceFill(['responsable_id' => $responsableId])->saveQuietly();
+
+        $roles = collect([$responsableId => TacheIntervenant::RESPONSABLE]);
+        foreach ($appuiIds as $id) {
+            if ((int) $id !== $responsableId) {
+                $roles->put((int) $id, TacheIntervenant::APPUI);
+            }
+        }
+        foreach ($informeIds as $id) {
+            if ((int) $id !== $responsableId && ! $roles->has((int) $id)) {
+                $roles->put((int) $id, TacheIntervenant::INFORME);
+            }
+        }
+
+        $tache->intervenants()->whereNotIn('user_id', $roles->keys())->delete();
+        foreach ($roles as $userId => $role) {
+            $tache->intervenants()->updateOrCreate(['user_id' => $userId], ['role' => $role]);
+        }
     }
 
     public function justifier(Tache $tache, MotifNonExecution $motif, ?string $precision = null): Tache

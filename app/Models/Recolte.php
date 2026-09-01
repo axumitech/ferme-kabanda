@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int $plantation_id
  * @property CarbonInterface $date
  * @property string $quantite
+ * @property string $quantite_vendue
  * @property string $unite
  * @property string|null $canal_commercial
  * @property string $user_nom
@@ -29,6 +30,7 @@ class Recolte extends Model
         'date' => 'date',
         'created_at' => 'datetime',
         'quantite' => 'decimal:2',
+        'quantite_vendue' => 'decimal:2',
         'pertes' => 'decimal:2',
         'valeur' => 'decimal:2',
     ];

@@ -1,5 +1,9 @@
 import { Head, router, useForm, usePage } from '@inertiajs/react';
 import {
+    CheckCircle2,
+    ClipboardCheck,
+    Clock3,
+    KeyRound,
     Mail,
     Pencil,
     Phone,
@@ -27,6 +31,10 @@ type Member = {
     departement: Reference | null;
     is_admin: boolean;
     niveau_hierarchie: number;
+    actif: boolean;
+    derniere_connexion_at: string | null;
+    assigned_tasks_count: number;
+    open_tasks_count: number;
     created_at: string;
 };
 
@@ -59,6 +67,40 @@ const emptyMember = {
     departement_id: '',
     is_admin: false,
     niveau_hierarchie: 4,
+};
+
+const operabilityLevels = {
+    1: {
+        label: 'Direction',
+        description:
+            'Pilotage global, données confidentielles, décisions et clôtures.',
+    },
+    2: {
+        label: 'Management',
+        description:
+            'Supervision, données restreintes, approbations et arbitrages.',
+    },
+    3: {
+        label: 'Encadrement',
+        description:
+            'Suivi du département, planification et vérification du travail.',
+    },
+    4: {
+        label: 'Exécution',
+        description:
+            'Tâches assignées, saisies terrain et informations partagées.',
+    },
+} as const;
+
+const formatLastLogin = (value: string | null) => {
+    if (!value) {
+        return 'Jamais connecté';
+    }
+
+    return `Dernière connexion ${new Intl.DateTimeFormat('fr-FR', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+    }).format(new Date(value))}`;
 };
 
 export default function MembersAdmin({
@@ -152,13 +194,76 @@ export default function MembersAdmin({
 
     return (
         <AdminLayout
-            title="Gestion des membres"
-            subtitle="Gérez l'accès à l'application"
+            title="Membres de l’organisation"
+            subtitle="Créez les accès, rattachez chaque personne à son équipe et définissez précisément son niveau d’opérabilité."
         >
             <ConfirmDialog />
             <Head title="Gestion des membres" />
 
-            <div className="admin-animate-in mx-auto grid max-w-7xl min-w-0 gap-6 lg:grid-cols-[380px_minmax(0,1fr)]">
+            <section className="admin-animate-in mb-6 grid gap-3 sm:grid-cols-3">
+                <MemberStat
+                    icon={Users}
+                    label="Comptes actifs"
+                    value={members.filter((member) => member.actif).length}
+                    detail="Peuvent accéder à FKN"
+                />
+                <MemberStat
+                    icon={ShieldCheck}
+                    label="Supervision"
+                    value={
+                        members.filter(
+                            (member) => member.niveau_hierarchie <= 3,
+                        ).length
+                    }
+                    detail="Direction, management et encadrement"
+                />
+                <MemberStat
+                    icon={ClipboardCheck}
+                    label="Tâches ouvertes"
+                    value={members.reduce(
+                        (total, member) => total + member.open_tasks_count,
+                        0,
+                    )}
+                    detail="Attribuées aux membres"
+                />
+            </section>
+
+            <section className="admin-animate-in mb-6 rounded-2xl border border-[#dbe7de] bg-[#f4f8f4] p-4 shadow-sm">
+                <div className="mb-3 flex items-start gap-3">
+                    <div className="rounded-xl bg-white p-2.5 text-[#276644] shadow-sm">
+                        <KeyRound className="size-5" />
+                    </div>
+                    <div>
+                        <h2 className="font-semibold text-[#17352a]">
+                            Niveaux d’opérabilité
+                        </h2>
+                        <p className="mt-1 text-xs leading-5 text-[#637069]">
+                            Le niveau règle la visibilité et les décisions. Le
+                            statut administrateur autorise séparément la
+                            configuration de l’application.
+                        </p>
+                    </div>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                    {Object.entries(operabilityLevels).map(
+                        ([level, capability]) => (
+                            <div
+                                key={level}
+                                className="rounded-xl border border-[#dbe7de] bg-white p-3"
+                            >
+                                <p className="text-xs font-bold text-[#276644]">
+                                    Niveau {level} · {capability.label}
+                                </p>
+                                <p className="mt-1 text-[11.5px] leading-5 text-[#637069]">
+                                    {capability.description}
+                                </p>
+                            </div>
+                        ),
+                    )}
+                </div>
+            </section>
+
+            <div className="admin-animate-in grid w-full min-w-0 gap-6 lg:grid-cols-[380px_minmax(0,1fr)]">
                 <section className="admin-form-panel h-fit lg:sticky lg:top-5">
                     <div className="mb-5 flex items-center gap-3">
                         <div className="rounded-xl bg-[#e7f1e9] p-2.5 text-[#276644]">
@@ -337,7 +442,7 @@ export default function MembersAdmin({
                         )}
 
                         <Field
-                            label="Niveau hiérarchique"
+                            label="Niveau d’opérabilité"
                             error={form.errors.niveau_hierarchie}
                         >
                             <select
@@ -349,15 +454,21 @@ export default function MembersAdmin({
                                     )
                                 }
                             >
-                                <option value={1}>1 — Direction</option>
-                                <option value={2}>2 — Management</option>
-                                <option value={3}>3 — Encadrement</option>
-                                <option value={4}>4 — Exécution</option>
+                                {Object.entries(operabilityLevels).map(
+                                    ([level, capability]) => (
+                                        <option key={level} value={level}>
+                                            {level} — {capability.label}
+                                        </option>
+                                    ),
+                                )}
                             </select>
                             <span className="text-[11px] font-normal text-[#637069]">
-                                Détermine la visibilité des données restreintes
-                                et confidentielles, indépendamment de l’accès
-                                technique à l’administration.
+                                {
+                                    operabilityLevels[
+                                        form.data
+                                            .niveau_hierarchie as keyof typeof operabilityLevels
+                                    ].description
+                                }
                             </span>
                         </Field>
 
@@ -494,8 +605,21 @@ export default function MembersAdmin({
                                                 )}
                                                 <span className="admin-badge admin-badge--gray">
                                                     Niveau{' '}
-                                                    {member.niveau_hierarchie}
+                                                    {member.niveau_hierarchie} ·{' '}
+                                                    {
+                                                        operabilityLevels[
+                                                            member.niveau_hierarchie as keyof typeof operabilityLevels
+                                                        ].label
+                                                    }
                                                 </span>
+                                                {member.actif && (
+                                                    <span className="admin-badge admin-badge--green">
+                                                        <CheckCircle2
+                                                            size={12}
+                                                        />
+                                                        Accès actif
+                                                    </span>
+                                                )}
                                                 {member.departement && (
                                                     <span className="admin-badge admin-badge--gray">
                                                         {
@@ -541,6 +665,27 @@ export default function MembersAdmin({
                                                         {member.email}
                                                     </span>
                                                 )}
+                                                <span className="inline-flex items-center gap-1.5">
+                                                    <ClipboardCheck
+                                                        size={14}
+                                                        className="text-[#9aaa9f]"
+                                                    />
+                                                    {member.open_tasks_count}{' '}
+                                                    ouverte(s) ·{' '}
+                                                    {
+                                                        member.assigned_tasks_count
+                                                    }{' '}
+                                                    attribuée(s)
+                                                </span>
+                                                <span className="inline-flex items-center gap-1.5">
+                                                    <Clock3
+                                                        size={14}
+                                                        className="text-[#9aaa9f]"
+                                                    />
+                                                    {formatLastLogin(
+                                                        member.derniere_connexion_at,
+                                                    )}
+                                                </span>
                                             </div>
                                             {member.team_member && (
                                                 <div className="mt-2.5 inline-block rounded-lg border border-[#e2efe6] bg-[#f4f8f4] px-3 py-1.5 text-[12.5px] text-[#267049]">
@@ -594,6 +739,39 @@ export default function MembersAdmin({
                 </section>
             </div>
         </AdminLayout>
+    );
+}
+
+function MemberStat({
+    icon: Icon,
+    label,
+    value,
+    detail,
+}: {
+    icon: React.ComponentType<{ className?: string }>;
+    label: string;
+    value: number;
+    detail: string;
+}) {
+    return (
+        <article className="rounded-2xl border border-[#e5e1d8] bg-white p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+                <div>
+                    <p className="text-xs font-semibold text-[#637069]">
+                        {label}
+                    </p>
+                    <p className="mt-2 text-3xl font-bold tracking-tight text-[#17352a]">
+                        {value}
+                    </p>
+                    <p className="mt-1 text-[11.5px] text-[#87918b]">
+                        {detail}
+                    </p>
+                </div>
+                <div className="rounded-xl bg-[#e7f1e9] p-2.5 text-[#276644]">
+                    <Icon className="size-5" />
+                </div>
+            </div>
+        </article>
     );
 }
 

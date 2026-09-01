@@ -9,20 +9,26 @@ use App\Http\Controllers\Controller;
 use App\Models\Departement;
 use App\Models\JournalAudit;
 use App\Models\MotifNonExecution;
+use App\Models\OrdreTravail;
 use App\Models\Site;
 use App\Models\Tache;
 use App\Models\User;
 use App\Services\TacheService;
 use App\Services\VisibiliteService;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class OperationController extends Controller
 {
+    /** @var list<string> */
+    private const STATUTS_OT_OUVERTS = ['demande', 'approuve', 'planifie', 'en_cours', 'realise', 'verifie'];
+
     public function index(Request $request, VisibiliteService $visibilite): Response
     {
         $this->ensureAdmin($request);
@@ -82,6 +88,7 @@ class OperationController extends Controller
             'sites' => Site::query()->where('actif', true)->orderBy('code')->get(['id', 'code', 'nom']),
             'departements' => Departement::query()->where('actif', true)->orderBy('code')->get(['id', 'code', 'nom']),
             'motifs' => MotifNonExecution::query()->where('actif', true)->orderBy('ordre')->orderBy('libelle')->get(),
+            'openWorkOrders' => $this->openWorkOrders(),
             'users' => User::query()->where('actif', true)->orderBy('name')->get(['id', 'name', 'niveau_hierarchie']),
             'audit' => $voitAudit
                 ? JournalAudit::query()
@@ -164,13 +171,58 @@ class OperationController extends Controller
     {
         $this->ensureAdmin($request);
 
+        $motifData = $request->validate([
+            'motif_id' => [
+                'required',
+                'integer',
+                Rule::exists('motifs_non_execution', 'id')->where('actif', true),
+            ],
+        ]);
+        $motif = MotifNonExecution::query()
+            ->whereKey((int) $motifData['motif_id'])
+            ->where('actif', true)
+            ->firstOrFail();
+        $estPanne = mb_strtoupper(trim($motif->code)) === 'PANNE';
+
         $data = $request->validate([
-            'motif_id' => ['required', 'integer', 'exists:motifs_non_execution,id'],
-            'motif_precision' => ['nullable', 'string', 'max:180'],
+            'motif_id' => [
+                'required',
+                'integer',
+                Rule::exists('motifs_non_execution', 'id')->where('actif', true),
+            ],
+            'motif_precision' => ['nullable', 'string', $estPanne ? 'max:150' : 'max:180'],
+            'ordre_travail_id' => [
+                Rule::requiredIf($estPanne),
+                Rule::prohibitedIf(! $estPanne),
+                'nullable',
+                'integer',
+                Rule::exists('ordres_travail', 'id')
+                    ->where(fn ($query) => $query->whereIn('statut', self::STATUTS_OT_OUVERTS)),
+            ],
+        ], [
+            'ordre_travail_id.required' => 'Le motif PANNE exige un ordre de travail ouvert.',
+            'ordre_travail_id.prohibited' => 'Un ordre de travail ne peut être lié qu’au motif PANNE.',
+            'ordre_travail_id.exists' => 'L’ordre de travail sélectionné est introuvable ou n’est plus ouvert.',
         ]);
 
-        $motif = MotifNonExecution::query()->whereKey((int) $data['motif_id'])->firstOrFail();
-        $service->justifier($tache, $motif, $data['motif_precision'] ?? null);
+        $ordre = $estPanne
+            ? OrdreTravail::query()
+                ->whereKey((int) $data['ordre_travail_id'])
+                ->whereIn('statut', self::STATUTS_OT_OUVERTS)
+                ->firstOrFail()
+            : null;
+        $precision = trim(implode(' ', array_filter([
+            $ordre?->reference,
+            $data['motif_precision'] ?? null,
+        ], fn ($value): bool => filled($value))));
+
+        DB::transaction(function () use ($tache, $ordre, $service, $motif, $precision): void {
+            if ($ordre) {
+                $tache->forceFill(['ordre_travail_id' => $ordre->id])->saveQuietly();
+            }
+
+            $service->justifier($tache, $motif, $precision !== '' ? $precision : null);
+        });
 
         return back()->with('success', 'Non-exécution justifiée.');
     }
@@ -227,5 +279,15 @@ class OperationController extends Controller
             $request->user() !== null && $visibilite->peutVoir($request->user(), 'dossiers_disciplinaires'),
             403,
         );
+    }
+
+    /** @return Collection<int, OrdreTravail> */
+    private function openWorkOrders(): Collection
+    {
+        return OrdreTravail::query()
+            ->whereIn('statut', self::STATUTS_OT_OUVERTS)
+            ->orderByDesc('demande_le')
+            ->limit(50)
+            ->get(['id', 'reference', 'objet', 'cible_libelle', 'statut']);
     }
 }
