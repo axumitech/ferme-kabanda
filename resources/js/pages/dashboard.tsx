@@ -1,5 +1,13 @@
 import { Head, Link } from '@inertiajs/react';
 import { ArrowRight, CircleX } from 'lucide-react';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from '@/components/ui/dialog';
 
 type Task = {
     id: number;
@@ -153,6 +161,76 @@ export default function Dashboard({
               ? ' — les miennes'
               : ' — toute la ferme';
 
+    const commercialDetails: CardDetails = {
+        description:
+            'Valeur des récoltes enregistrées sur les 30 derniers jours, répartie par canal commercial.',
+        metrics: [
+            {
+                label: 'Valeur totale des récoltes',
+                value: money(commercial.total),
+            },
+            { label: 'Récoltes enregistrées', value: commercial.count },
+            ...commercial.channels.map((channel) => ({
+                label: `${channel.channel} · ${channel.share} % · ${channel.count} récolte(s)`,
+                value: money(channel.amount),
+            })),
+        ],
+    };
+    const equipmentDetails: CardDetails = {
+        description:
+            'Situation du parc actif et dépenses enregistrées sur les 30 derniers jours.',
+        metrics: [
+            { label: 'Équipements actifs', value: equipment.active },
+            { label: 'Entretiens dus', value: equipment.maintenanceDue },
+            {
+                label: 'Machines immobilisées ou en maintenance',
+                value: equipment.unavailable,
+            },
+            {
+                label: 'Prestations facturées aux tiers · 30 jours',
+                value: money(equipment.thirdPartyRevenue),
+            },
+            {
+                label: 'Carburant, pièces et main-d’œuvre · 30 jours',
+                value: money(equipment.operatingCosts),
+            },
+        ],
+    };
+    const maintenanceDetails: CardDetails = {
+        description:
+            'Ordres actuellement ouverts et indicateurs de maintenance sur les 90 derniers jours.',
+        metrics: [
+            { label: 'Ordres ouverts', value: maintenance.openOrders },
+            { label: 'Ordres urgents', value: maintenance.urgentOrders },
+            {
+                label: 'Ordres de plus de 30 jours',
+                value: maintenance.overThirtyDays,
+            },
+            {
+                label: 'Part du préventif',
+                value:
+                    maintenance.preventiveShare === null
+                        ? 'Aucune donnée'
+                        : `${maintenance.preventiveShare} %`,
+            },
+            {
+                label: 'Temps moyen de réparation',
+                value:
+                    maintenance.averageRepairHours === null
+                        ? 'Aucune donnée'
+                        : `${maintenance.averageRepairHours} h`,
+            },
+            {
+                label: 'Durée d’immobilisation',
+                value: `${maintenance.downtimeHours} h`,
+            },
+            {
+                label: 'Pannes récurrentes',
+                value: maintenance.recurringFailures,
+            },
+        ],
+    };
+
     return (
         <>
             <Head title="Ferme Kabanda Naweza — Tableau de bord" />
@@ -161,10 +239,16 @@ export default function Dashboard({
                     <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
                         Ferme Kabanda Naweza — Tableau de bord
                     </h1>
+                    <p className="text-sm text-[#6b7280] dark:text-[#9ca3af]">
+                        Cliquez sur une carte pour consulter ses détails ou
+                        accéder à la page de travail.
+                    </p>
 
                     <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
                         <StatCard
                             label="Tâches dues aujourd’hui"
+                            href="/journee"
+                            actionLabel="Ouvrir ma journée"
                             value={stats.dueTasks}
                             description={
                                 stats.lateTasks > 0
@@ -177,12 +261,38 @@ export default function Dashboard({
                             <>
                                 <StatCard
                                     label="Approbations en attente"
-                                    value={stats.pendingApprovals}
-                                    description="Actions proposées par les équipes"
+                                    href="/journee"
+                                    actionLabel="Voir les propositions"
+                                    details={{
+                                        description:
+                                            'Le compteur des approbations n’est pas encore connecté aux propositions enregistrées. Consultez la page de travail pour vérifier les demandes.',
+                                        metrics: [],
+                                    }}
+                                    value="—"
+                                    description="Compteur en cours de connexion"
                                     tone="warning"
                                 />
                                 <StatCard
                                     label="Dossiers DDE à valider"
+                                    href="/registre-ferme?onglet=taches"
+                                    actionLabel="Ouvrir le registre des tâches"
+                                    details={{
+                                        description:
+                                            'Dossiers en attente de validation dans votre périmètre. Cet aperçu affiche jusqu’à 25 dossiers.',
+                                        metrics: [
+                                            {
+                                                label: 'Dossiers à valider',
+                                                value: stats.ddeToValidate,
+                                            },
+                                        ],
+                                        entries: decisions.map((decision) => ({
+                                            label: `${decision.reference} · ${decision.title}`,
+                                            description:
+                                                decision.responsible ??
+                                                'Sans responsable',
+                                            href: `/registre-ferme/${decision.id}`,
+                                        })),
+                                    }}
                                     value={stats.ddeToValidate}
                                     description="La machine propose, vous confirmez"
                                     tone="danger"
@@ -193,12 +303,16 @@ export default function Dashboard({
                             <>
                                 <StatCard
                                     label="Réquisitions en circuit"
+                                    href="/requisitions"
+                                    actionLabel="Consulter les réquisitions"
                                     value={stats.requisitionsInCircuit}
                                     description="À vérifier ou approuver (DoA)"
                                     tone="info"
                                 />
                                 <StatCard
                                     label="Incidents ouverts"
+                                    href="/registre-ferme?onglet=incidents"
+                                    actionLabel="Consulter les incidents"
                                     value={stats.openIncidents}
                                     description="Échéances 1 h / 4 h / 48 h / 72 h"
                                     tone="danger"
@@ -227,7 +341,7 @@ export default function Dashboard({
                                         >
                                             <Td>
                                                 <Link
-                                                    href="/admin/operations"
+                                                    href={`/registre-ferme/${decision.id}`}
                                                     className="font-semibold text-[#1a5632] hover:underline dark:text-[#62c487]"
                                                 >
                                                     {decision.reference}
@@ -301,7 +415,7 @@ export default function Dashboard({
                                         <Td>{task.reference}</Td>
                                         <Td>
                                             <Link
-                                                href="/admin/operations"
+                                                href={`/registre-ferme/${task.id}`}
                                                 className="font-medium text-[#1a5632] hover:underline dark:text-[#62c487]"
                                             >
                                                 {task.titre}
@@ -370,19 +484,25 @@ export default function Dashboard({
                     {canDirect && (
                         <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
                             <StatCard
-                                label="Ventes 30 jours"
+                                label="Valeur des récoltes — 30 j"
+                                href="/registre-ferme?onglet=production"
+                                actionLabel="Consulter les récoltes"
+                                details={commercialDetails}
                                 value={money(commercial.total)}
-                                description={`${commercial.count} bon(s) de livraison`}
+                                description={`${commercial.count} récolte(s) enregistrée(s)`}
                                 tone="success"
                             />
                             <StatCard
                                 label="Reste à recouvrer"
-                                value={money(commercial.outstanding)}
-                                description={
-                                    commercial.outstanding > 0
-                                        ? 'Crédits clients ouverts'
-                                        : 'Tout est soldé'
-                                }
+                                href="/ventes"
+                                actionLabel="Consulter les ventes et encaissements"
+                                details={{
+                                    description:
+                                        'Le montant à recouvrer n’est pas encore connecté aux encaissements. Consultez les ventes pour vérifier les soldes clients.',
+                                    metrics: [],
+                                }}
+                                value="—"
+                                description="Consultez les soldes dans les ventes"
                                 tone={
                                     commercial.outstanding > 0
                                         ? 'danger'
@@ -393,8 +513,28 @@ export default function Dashboard({
                                 <StatCard
                                     key={channel.channel}
                                     label={channel.channel}
+                                    href="/registre-ferme?onglet=production"
+                                    actionLabel="Consulter les récoltes"
+                                    details={{
+                                        description:
+                                            'Récoltes enregistrées sur ce canal commercial pendant les 30 derniers jours.',
+                                        metrics: [
+                                            {
+                                                label: 'Valeur des récoltes',
+                                                value: money(channel.amount),
+                                            },
+                                            {
+                                                label: 'Part de la valeur totale',
+                                                value: `${channel.share} %`,
+                                            },
+                                            {
+                                                label: 'Récoltes enregistrées',
+                                                value: channel.count,
+                                            },
+                                        ],
+                                    }}
                                     value={money(channel.amount)}
-                                    description={`${channel.share} % du chiffre · ${channel.count} bon(s)`}
+                                    description={`${channel.share} % du chiffre · ${channel.count} récolte(s)`}
                                     tone={
                                         channel.channel
                                             .toLowerCase()
@@ -411,6 +551,9 @@ export default function Dashboard({
                         <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
                             <StatCard
                                 label="Entretiens dus"
+                                href="/maintenance?resource=equipment"
+                                actionLabel="Consulter les entretiens du parc"
+                                details={equipmentDetails}
                                 value={equipment.maintenanceDue}
                                 description={
                                     equipment.maintenanceDue > 0
@@ -425,6 +568,9 @@ export default function Dashboard({
                             />
                             <StatCard
                                 label="Machines immobilisées"
+                                href="/maintenance?resource=equipment"
+                                actionLabel="Consulter les équipements"
+                                details={equipmentDetails}
                                 value={equipment.unavailable}
                                 description={`${equipment.active} équipements actifs`}
                                 tone={
@@ -435,12 +581,18 @@ export default function Dashboard({
                             />
                             <StatCard
                                 label="Prestations tiers — 30 j"
+                                href="/maintenance?resource=equipment"
+                                actionLabel="Consulter les travaux des équipements"
+                                details={equipmentDetails}
                                 value={money(equipment.thirdPartyRevenue)}
                                 description="Travaux facturés à l’extérieur"
                                 tone="success"
                             />
                             <StatCard
                                 label="Coûts d’exploitation — 30 j"
+                                href="/maintenance?resource=equipment"
+                                actionLabel="Consulter les dépenses des équipements"
+                                details={equipmentDetails}
                                 value={money(equipment.operatingCosts)}
                                 description="Carburant et maintenance"
                                 tone="gray"
@@ -452,6 +604,9 @@ export default function Dashboard({
                         <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
                             <StatCard
                                 label="Ordres ouverts"
+                                href="/maintenance?statut=open"
+                                actionLabel="Consulter les ordres ouverts"
+                                details={maintenanceDetails}
                                 value={maintenance.openOrders}
                                 description={`${maintenance.urgentOrders} urgent(s) · ${maintenance.overThirtyDays} de plus de 30 jours`}
                                 tone={
@@ -463,6 +618,9 @@ export default function Dashboard({
                             />
                             <StatCard
                                 label="Part du préventif"
+                                href="/maintenance?nature=preventif&statut=all"
+                                actionLabel="Consulter les ordres préventifs"
+                                details={maintenanceDetails}
                                 value={
                                     maintenance.preventiveShare === null
                                         ? '—'
@@ -484,6 +642,9 @@ export default function Dashboard({
                             />
                             <StatCard
                                 label="Temps moyen de réparation"
+                                href="/maintenance?statut=all"
+                                actionLabel="Consulter les interventions"
+                                details={maintenanceDetails}
                                 value={
                                     maintenance.averageRepairHours === null
                                         ? '—'
@@ -494,6 +655,9 @@ export default function Dashboard({
                             />
                             <StatCard
                                 label="Pannes récurrentes"
+                                href="/maintenance?statut=all"
+                                actionLabel="Consulter l’historique de maintenance"
+                                details={maintenanceDetails}
                                 value={maintenance.recurringFailures}
                                 description={
                                     maintenance.recurringFailures > 0
@@ -660,27 +824,129 @@ const toneText: Record<Tone, string> = {
     info: 'text-blue-600 dark:text-blue-400',
 };
 
+type CardDetails = {
+    description: string;
+    metrics: { label: string; value: string | number }[];
+    entries?: { label: string; description: string; href: string }[];
+};
+
 function StatCard({
     label,
     value,
     description,
+    href,
+    actionLabel,
+    details,
     tone = 'gray',
 }: {
     label: string;
     value: string | number;
     description: string;
+    href: string;
+    actionLabel: string;
+    details?: CardDetails;
     tone?: Tone;
 }) {
-    return (
-        <article className="min-h-40 rounded-xl border border-[#e5e7eb] bg-white p-6 shadow-sm dark:border-white/10 dark:bg-[#1f1f22]">
-            <p className="text-sm text-[#6b7280] dark:text-[#9ca3af]">
+    const classes =
+        'group block w-full min-h-40 rounded-xl border border-[#e5e7eb] bg-white p-6 text-left shadow-sm transition duration-200 hover:-translate-y-1 hover:border-[#1a5632] hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5632] focus-visible:ring-offset-2 motion-reduce:transform-none dark:border-white/10 dark:bg-[#1f1f22] dark:hover:border-[#62c487]';
+    const content = (
+        <>
+            <span className="block text-sm text-[#6b7280] dark:text-[#9ca3af]">
                 {label}
-            </p>
-            <p className="mt-2 text-3xl font-semibold tracking-tight">
+            </span>
+            <span className="mt-2 block text-3xl font-semibold tracking-tight">
                 {value}
-            </p>
-            <p className={`mt-3 text-sm ${toneText[tone]}`}>{description}</p>
-        </article>
+            </span>
+            <span className={`mt-3 block text-sm ${toneText[tone]}`}>
+                {description}
+            </span>
+            <span className="mt-4 flex items-center gap-2 text-sm font-semibold text-[#1a5632] dark:text-[#62c487]">
+                {details ? 'Voir les détails' : actionLabel}
+                <ArrowRight
+                    size={16}
+                    aria-hidden="true"
+                    className="transition-transform group-hover:translate-x-1 motion-reduce:transform-none"
+                />
+            </span>
+        </>
+    );
+
+    if (!details) {
+        return (
+            <Link href={href} className={classes}>
+                {content}
+            </Link>
+        );
+    }
+
+    return (
+        <Dialog>
+            <DialogTrigger asChild>
+                <button type="button" className={classes}>
+                    {content}
+                </button>
+            </DialogTrigger>
+            <DialogContent className="max-h-[85svh] overflow-y-auto sm:max-w-3xl">
+                <DialogHeader className="pr-6">
+                    <DialogTitle>{label}</DialogTitle>
+                    <DialogDescription>{details.description}</DialogDescription>
+                </DialogHeader>
+                {details.metrics.length > 0 && (
+                    <dl className="grid gap-3 sm:grid-cols-2">
+                        {details.metrics.map((metric) => (
+                            <div
+                                key={metric.label}
+                                className="rounded-lg border bg-muted/30 p-4"
+                            >
+                                <dt className="text-sm text-muted-foreground">
+                                    {metric.label}
+                                </dt>
+                                <dd className="mt-2 text-2xl font-semibold">
+                                    {metric.value}
+                                </dd>
+                            </div>
+                        ))}
+                    </dl>
+                )}
+                {details.entries && (
+                    <ul className="divide-y rounded-lg border">
+                        {details.entries.map((entry) => (
+                            <li key={entry.href}>
+                                <Link
+                                    href={entry.href}
+                                    className="flex items-center justify-between gap-4 p-4 hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                                >
+                                    <span>
+                                        <span className="block font-medium">
+                                            {entry.label}
+                                        </span>
+                                        <span className="text-sm text-muted-foreground">
+                                            {entry.description}
+                                        </span>
+                                    </span>
+                                    <ArrowRight
+                                        size={18}
+                                        aria-hidden="true"
+                                        className="shrink-0"
+                                    />
+                                </Link>
+                            </li>
+                        ))}
+                        {details.entries.length === 0 && (
+                            <li className="p-4 text-sm text-muted-foreground">
+                                Aucun dossier à valider.
+                            </li>
+                        )}
+                    </ul>
+                )}
+                <Link
+                    href={href}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#1a5632] px-4 py-3 text-sm font-semibold text-white hover:bg-[#154529] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
+                >
+                    {actionLabel} <ArrowRight size={16} aria-hidden="true" />
+                </Link>
+            </DialogContent>
+        </Dialog>
     );
 }
 
